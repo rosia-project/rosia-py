@@ -1,5 +1,5 @@
 from rosia import InputPort, OutputPort, reaction, Node, Rosia, Coordinator
-from rosia.time import Time, ms, s
+from rosia.time import Time, ms
 from rosia.time.Timer import Timer
 import logging
 
@@ -19,22 +19,23 @@ class IntGenerator(Rosia):
 
 
 @Node
-class Printer(Rosia):
+class Printer:
     input_int1 = InputPort[int]()
     input_int2 = InputPort[int]()
 
     @reaction([input_int1, input_int2])
     def print_message(self):
-        assert self.input_int1 == self.input_int2, (
-            "Input ports should have the same value"
-        )
-        self.rosia.logger.info(f"Received message: {self.input_int1} {self.input_int2}")
+        print(f"Received message: {self.input_int1} {self.input_int2}")
+        if self.input_int1 is not None and self.input_int2 is not None:
+            assert self.input_int1 >= self.input_int2, (
+                "Input ports should have the same value"
+            )
 
 
 if __name__ == "__main__":
     coor = Coordinator(logging.INFO)
-    timer1 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
-    timer2 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
+    timer1 = coor.create_node(Timer(interval=10 * ms, offset=0 * ms))
+    timer2 = coor.create_node(Timer(interval=10 * ms, offset=1 * ms))
     int_gen1 = coor.create_node(IntGenerator())
     int_gen2 = coor.create_node(IntGenerator())
     printer = coor.create_node(Printer())

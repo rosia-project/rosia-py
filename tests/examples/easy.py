@@ -3,34 +3,33 @@ import time
 
 
 @Node
-class StringGenerator:
-    output_str = OutputPort[str]()
+class IntGenerator:
+    output_int = OutputPort[int]()
 
     def __init__(self):
         self.count = 0
 
     def start(self):
         while True:
-            string = f"Hello, ROSIA! {self.count}"
-            print("Sending:", string)
-            self.output_str(string)
+            print("Sending:", self.count)
+            self.output_int(self.count)
             self.count += 1
             time.sleep(1)
 
 
 @Node
 class Printer:
-    input_str = InputPort[str]()
+    input_int = InputPort[int]()
 
-    @reaction([input_str])
+    @reaction([input_int])
     def print_message(self):
-        print(f"Received message: {self.input_str}")
+        print(f"Received: {self.input_int}")
 
 
 if __name__ == "__main__":
     coor = Coordinator()
-    str_gen = coor.create_node(StringGenerator())
+    int_gen = coor.create_node(IntGenerator())
     printer = coor.create_node(Printer())
-    str_gen.output_str >>= printer.input_str
+    int_gen.output_int >>= printer.input_int
 
     coor.execute()

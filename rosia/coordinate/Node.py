@@ -274,6 +274,7 @@ class Node:
                 for timestamp in self.message_queue.keys()
                 if timestamp < self.safe_to_advance_time
             ]
+            ready_timestamps.sort()
             for i in range(len(ready_timestamps)):
                 timestamp = ready_timestamps[i]
                 self.current_time = timestamp

@@ -59,7 +59,7 @@ class NodeInitArgs:
     kwargs: Dict[str, Any]
 
 
-def Node(cls: Type) -> Type:
+def Node(cls: Type[T]) -> Type[T]:
     def stub_init(self, *args, **kwargs):
         pass
 

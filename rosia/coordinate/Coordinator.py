@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Type, TypeVar, cast
+from typing import Dict, List, Optional, TypeVar, cast
 from rosia.comms.Types import ClientType
 from rosia.comms.serializers import Serializer
 from rosia.comms.transports import Transport
@@ -28,7 +28,7 @@ class Coordinator:
         self.logger = logging.getLogger("Coordinator")
         logging.basicConfig(level=log_level)
 
-    def create_node(self, node_cls: Type[T]) -> Type[T]:
+    def create_node(self, node_cls: T) -> T:
         self.node_count += 1
         assert hasattr(node_cls, "_NodeInitArgs"), (
             "Node class must be instantiated as argument to create_node"
@@ -45,7 +45,8 @@ class Coordinator:
         self.node_infos[node_name] = NodeInfo(
             node=wrapped_node, executor=None, input_endpoints={}
         )
-        return wrapped_node  # type: ignore
+        wrapped_node = cast(T, wrapped_node)
+        return wrapped_node
 
     def execute(self) -> None:
         for name, node_info in self.node_infos.items():
