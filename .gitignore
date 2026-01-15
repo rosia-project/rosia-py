@@ -1,5 +1,6 @@
 /dist/
 /rosia.egg-info/
+/.ruff_cache/
 
 # Artifacts
 **/__pycache__/
