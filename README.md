@@ -107,7 +107,7 @@ When we execute this example with `python tests/examples/parallel_timed.py`, not
 ### Install Pre-commit Hooks
 ```bash
 pip install pre-commit
-pre-commit install --hook-type commit-msg --hook-type pre-push
+pre-commit install --hook-type commit-msg --hook-type pre-push --hook-type pre-commit
 pre-commit run --all-files
 ```
 Code is automatically formatted before committing. Commit messages should follow conventional commit.
