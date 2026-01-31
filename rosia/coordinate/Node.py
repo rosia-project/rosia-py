@@ -8,7 +8,7 @@ from rosia.coordinate.Port import (
 from rosia.frontend.Connection import InputPortConnector, OutputPortConnector
 from rosia.coordinate.messages.base import Message
 from rosia.execute import ExecutorController
-from rosia.frontend.Node import NodeInitArgs
+from rosia.utils import NodeInitArgs
 from rosia.frontend.Port import (
     InputPort as UserInputPort,
     OutputPort as UserOutputPort,
