@@ -3,7 +3,7 @@ from rosia.comms.Types import ClientType
 from rosia.comms.serializers import Serializer
 from rosia.comms.transports import Transport
 from rosia.coordinate.Node import Node
-from rosia.coordinate.Port import InputPort, OutputPort
+from rosia.coordinate.Port import InputPortConnector, OutputPortConnector
 from rosia.coordinate.messages.base import Message
 from rosia.execute.Executor import Executor
 from dataclasses import dataclass
@@ -81,7 +81,9 @@ class Coordinator:
                 node_info.executor.call("_get_output_port_safe_to_advance_time")
             )
 
-        def propage_output_sta(port: OutputPort, propagated: List[str]) -> None:
+        def propage_output_sta(
+            port: OutputPortConnector, propagated: List[str]
+        ) -> None:
             if port.name in propagated:
                 return
             propagated.append(port.name)
@@ -125,9 +127,11 @@ class Coordinator:
 
     def set_value(self, port: T, value: T) -> None:
         """setting values with timestamps is not supported in the coordinator"""
-        port = cast(InputPort[T], port)  # type: ignore
+        port = cast(InputPortConnector[T], port)  # type: ignore
 
-        assert isinstance(port, InputPort), "You can only set values on input ports"
+        assert isinstance(port, InputPortConnector), (
+            "You can only set values on input ports"
+        )
         if getattr(port, "transport", None) is None:
             if port.name not in self.input_endpoints:
                 raise ValueError(

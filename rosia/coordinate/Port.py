@@ -20,16 +20,16 @@ class Port(Generic[T]):
 
 
 # This is used to connect the input port to the output port
-class InputPort(Port[T]):
+class InputPortConnector(Port[T]):
     def __init__(
         self,
         owner: "Node",
         name: Optional[str],
-        input_port_user_object: "InputPortUserObject[T]",
+        input_port_user_object: "InputPortRuntimeObj[T]",
         trigger_functions: List[Callable],
-        affected_output_ports: "List[OutputPort[T]]",
+        affected_output_ports: "List[OutputPortConnector[T]]",
     ) -> None:
-        self.upstream_ports: List[OutputPort[T]] = []
+        self.upstream_ports: List[OutputPortConnector[T]] = []
         self.trigger_functions: List[Callable] = trigger_functions
         self.value: Optional[T] = None
         self.owner = owner
@@ -41,7 +41,7 @@ class InputPort(Port[T]):
         self.transport: Optional[TransportBase] = (
             None  # Only set for SENDER ports (downstream ports of output ports)
         )
-        self.affected_output_ports: List[OutputPort[T]] = affected_output_ports
+        self.affected_output_ports: List[OutputPortConnector[T]] = affected_output_ports
 
     def __set__(self, args: List[Any], kwargs: Dict[str, Any]) -> None:
         raise TypeError("InputPort is immutable")
@@ -54,7 +54,7 @@ class InputPort(Port[T]):
             )
         self.safe_to_advance_time = min_safe_to_advance_time
 
-    def get_upstream_port_by_name(self, name: str) -> "OutputPort[T]":
+    def get_upstream_port_by_name(self, name: str) -> "OutputPortConnector[T]":
         for upstream_port in self.upstream_ports:
             if upstream_port.name == name:
                 return upstream_port
@@ -90,7 +90,7 @@ class InputPort(Port[T]):
 
 
 # This is called by user code to get the value of the port
-class InputPortUserObject(Generic[T]):
+class InputPortRuntimeObj(Generic[T]):
     def __init__(self, parent: "Node", initial_value: T = None) -> None:
         self.parent = parent
         self.value: T = initial_value
@@ -101,16 +101,16 @@ class InputPortUserObject(Generic[T]):
 
     # The user should not be able to set the value of the port
     def __set__(self, value: T) -> None:
-        raise TypeError("InputPortUserObject is immutable")
+        raise TypeError("InputPortRuntimeObj is immutable")
 
     def __get__(self, instance: Any, owner: type) -> T:
         return self.value
 
 
 # This is used to connect the output port to the input port
-class OutputPort(Port[T]):
+class OutputPortConnector(Port[T]):
     def __init__(self, owner: "Node", name: Optional[str]) -> None:
-        self.downstream_ports: List[InputPort[T]] = []
+        self.downstream_ports: List[InputPortConnector[T]] = []
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"
         self.endpoint = None
@@ -139,8 +139,8 @@ class OutputPort(Port[T]):
                 )
             )
 
-    def connect(self, other: InputPort[T]) -> None:
-        if not isinstance(other, InputPort):
+    def connect(self, other: InputPortConnector[T]) -> None:
+        if not isinstance(other, InputPortConnector):
             raise TypeError("Can only connect OutputPort to InputPort")
         if other in self.downstream_ports:
             raise ValueError(f"Port {other.name} is already connected to {self.name}")
@@ -148,12 +148,12 @@ class OutputPort(Port[T]):
         other.upstream_ports.append(self)
 
     # >> shorthand for connect
-    def __rshift__(self, other: InputPort[T]) -> "OutputPort[T]":
+    def __rshift__(self, other: InputPortConnector[T]) -> "OutputPortConnector[T]":
         self.connect(other)
         return self
 
     # >>= shorthand for connect
-    def __irshift__(self, other: InputPort[T]) -> "OutputPort[T]":
+    def __irshift__(self, other: InputPortConnector[T]) -> "OutputPortConnector[T]":
         self.connect(other)
         return self
 
@@ -162,14 +162,14 @@ class OutputPort(Port[T]):
 
 
 # This is called by user code to set the value of the port
-class OutputPortUserObject(Generic[T]):
-    def __init__(self, parent: "Node", output_port: OutputPort[T]) -> None:
+class OutputPortRuntimeObj(Generic[T]):
+    def __init__(self, parent: "Node", output_port: OutputPortConnector[T]) -> None:
         self.parent = parent
         self.output_port = output_port
 
     # When the user sets the port, the value is passed to the coordinator to be sent to the downstream ports
     def __set__(self, value: T) -> None:
-        raise TypeError("OutputPortUserObject is immutable")
+        raise TypeError("OutputPortRuntimeObj is immutable")
 
     def set_next_timestamp(self, first_timestamp: Time) -> None:
         self.output_port.set_next_timestamp(first_timestamp)

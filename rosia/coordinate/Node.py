@@ -2,10 +2,10 @@ from rosia.comms.Types import ClientType
 from rosia.comms.transports import Transport, TransportBase
 from rosia.comms.serializers import Serializer, SerializerBase
 from rosia.coordinate.Port import (
-    InputPort,
-    OutputPort,
-    InputPortUserObject,
-    OutputPortUserObject,
+    InputPortConnector,
+    OutputPortConnector,
+    InputPortRuntimeObj,
+    OutputPortRuntimeObj,
 )
 
 from rosia.coordinate.messages.base import Message
@@ -63,23 +63,25 @@ class Node:
 
         self.transport: Optional[TransportBase] = None
 
-        self.input_port_infos: Dict[str, InputPort[Any]] = {}
-        self.output_port_infos: Dict[str, OutputPort[Any]] = {}
+        self.input_port_infos: Dict[str, InputPortConnector[Any]] = {}
+        self.output_port_infos: Dict[str, OutputPortConnector[Any]] = {}
 
         self.current_time: Time = Time(0)
         self.next_time: Time = Time(0)
         self.safe_to_advance_time: Time = Time(
             0
         )  # Safe to advance time to any current_time < safe_to_advance_time
-        self.message_queue: Dict[Time, List[Tuple[Message[Any], InputPort[Any]]]] = {}
+        self.message_queue: Dict[
+            Time, List[Tuple[Message[Any], InputPortConnector[Any]]]
+        ] = {}
         # Initialize output ports
         for name, value in self.node_cls.__dict__.items():
             if isinstance(value, UserOutputPort):
-                output_port = OutputPort(
+                output_port = OutputPortConnector(
                     owner=self,
                     name=value.name,
                 )
-                output_port_user_object = OutputPortUserObject(self, output_port)
+                output_port_user_object = OutputPortRuntimeObj(self, output_port)
                 port_name = f"{self.node_name}.{name}"
                 self.output_port_infos[port_name] = output_port
                 self.__setattr__(name, output_port)
@@ -89,7 +91,7 @@ class Node:
         for name, value in self.node_cls.__dict__.items():
             if isinstance(value, UserInputPort):
                 trigger_functions = value.trigger_functions
-                input_port_user_object = InputPortUserObject(self)
+                input_port_user_object = InputPortRuntimeObj(self)
                 affected_output_port_names = list(set(value.affected_output_port_names))
                 affected_output_ports = []
                 for port_name in affected_output_port_names:
@@ -99,7 +101,7 @@ class Node:
                             self.output_port_infos[output_port_name]
                         )
                 # print("affected output ports", affected_output_ports)
-                input_port = InputPort(
+                input_port = InputPortConnector(
                     owner=self,
                     name=value.name,
                     trigger_functions=trigger_functions,
@@ -147,7 +149,7 @@ class Node:
         return {name: node_endpoint for name in self.input_port_infos.keys()}
 
     def _set_output_transports(self, intput_endpoints: Dict[str, str]) -> None:
-        downstream_nodes: Dict[str, List[InputPort[Any]]] = {}
+        downstream_nodes: Dict[str, List[InputPortConnector[Any]]] = {}
         for name, output_port in self.output_port_infos.items():
             for downstream_port in output_port.downstream_ports:
                 downstream_node_name = downstream_port.owner.node_name
@@ -289,7 +291,7 @@ class Node:
                 sorted_messages_and_input_ports = sorted(
                     messages_and_input_ports, key=lambda x: x[0].from_port
                 )
-                affected_output_ports: List[OutputPort[Any]] = []
+                affected_output_ports: List[OutputPortConnector[Any]] = []
                 for message, input_port in sorted_messages_and_input_ports:
                     input_port.set_value(message)
                     affected_output_ports.extend(input_port.affected_output_ports)
