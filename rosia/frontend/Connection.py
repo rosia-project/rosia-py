@@ -6,7 +6,7 @@ from rosia.coordinate.messages.base import Message
 from rosia.time import Time, forever
 
 if TYPE_CHECKING:
-    from rosia.coordinate.Coordinator import Node
+    from rosia.coordinate.Node import NodeRuntime
     from rosia.coordinate.Port import InputPortRuntimeObj
 
 T = TypeVar("T")
@@ -24,9 +24,9 @@ class PortConnector(Generic[T]):
 class InputPortConnector(PortConnector[T]):
     def __init__(
         self,
-        owner: "Node",
+        owner: "NodeRuntime",
         name: Optional[str],
-        input_port_user_object: "InputPortRuntimeObj[T]",
+        input_port_runtime_object: "InputPortRuntimeObj[T]",
         trigger_functions: List[Callable],
         affected_output_ports: "List[OutputPortConnector[T]]",
     ) -> None:
@@ -35,7 +35,7 @@ class InputPortConnector(PortConnector[T]):
         self.value: Optional[T] = None
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"
-        self.input_port_user_object = input_port_user_object
+        self.input_port_runtime_object = input_port_runtime_object
         self.safe_to_advance_time: Time = forever
 
         self.port_type: ClientType
@@ -80,7 +80,7 @@ class InputPortConnector(PortConnector[T]):
             self.transport.send(msg)
         else:
             self.value = msg.data
-            self.input_port_user_object._set_value(msg.data)
+            self.input_port_runtime_object._set_value(msg.data)
 
     def _trigger(self) -> None:
         for function in self.trigger_functions:
@@ -92,7 +92,7 @@ class InputPortConnector(PortConnector[T]):
 
 # This is used to connect the output port to the input port
 class OutputPortConnector(PortConnector[T]):
-    def __init__(self, owner: "Node", name: Optional[str]) -> None:
+    def __init__(self, owner: "NodeRuntime", name: Optional[str]) -> None:
         self.downstream_ports: List[InputPortConnector[T]] = []
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"

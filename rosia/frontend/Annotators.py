@@ -1,13 +1,49 @@
-from typing import Callable, List, Type, TypeVar
+from typing import Any, Callable, List, Type, TypeVar, TypedDict
 
 from rosia.frontend.Port import InputPort
-from rosia.utils import get_class_effective_init, record_init_args
-
+from rosia.utils import get_class_effective_init, record_init_args, NodeInitArgs
+from typing import Optional
 import inspect
 import ast
 import textwrap
 
 T = TypeVar("T")
+
+
+class RosiaAnnotations(TypedDict):
+    original_init: Callable
+    original_cls: Type
+    init_args: Optional[NodeInitArgs]
+
+
+def check_rosia_annotations(rosia_annotations: RosiaAnnotations) -> None:
+    if rosia_annotations["original_init"] is None:
+        raise ValueError(
+            f"Original init is not set for class {rosia_annotations['original_cls'].__name__}"
+        )
+    if rosia_annotations["original_cls"] is None:
+        raise ValueError(
+            f"Original cls is not set for class {rosia_annotations['original_cls'].__name__}"
+        )
+    if rosia_annotations["init_args"] is None:
+        raise ValueError(
+            f"Init args are not set for class {rosia_annotations['original_cls'].__name__}"
+        )
+
+
+def get_rosia_annotations(cls: Any) -> RosiaAnnotations:
+    try:
+        return getattr(cls, "_rosia_annotations")
+    except AttributeError:
+        raise ValueError(f"Class {cls.__name__} is not annotated with @Node")
+
+
+def update_rosia_annotations(cls: Any, new_annotations: RosiaAnnotations) -> None:
+    if not hasattr(cls, "_rosia_annotations"):
+        setattr(cls, "_rosia_annotations", new_annotations)
+    else:
+        old_annotations = get_rosia_annotations(cls)
+        old_annotations.update(new_annotations)
 
 
 def analyze_output_ports(func: Callable):
@@ -57,7 +93,9 @@ def reaction(triggers: List[InputPort]) -> Callable[[Callable], Callable]:
 
 def Node(cls: Type[T]) -> Type[T]:
     original_init = get_class_effective_init(cls)
-    setattr(cls, "_original_init", original_init)
-    setattr(cls, "_original_cls", cls)
+    _rosia_annotations = RosiaAnnotations(
+        original_init=original_init, original_cls=cls, init_args=None
+    )
+    update_rosia_annotations(cls, _rosia_annotations)
     setattr(cls, "__init__", record_init_args)
     return cls

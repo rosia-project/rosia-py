@@ -3,4 +3,7 @@ from .Stubs import (
     record_init_args as record_init_args,
     NodeInitArgs as NodeInitArgs,
 )
-from .Analyze import get_class_effective_init as get_class_effective_init
+from .ClassHelper import (
+    get_class_effective_init as get_class_effective_init,
+    clone_class_detached as clone_class_detached,
+)

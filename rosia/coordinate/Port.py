@@ -3,7 +3,7 @@ from typing import Any, Generic, Optional, TypeVar, TYPE_CHECKING
 from rosia.time import Time
 
 if TYPE_CHECKING:
-    from rosia.coordinate.Coordinator import Node
+    from rosia.coordinate.Coordinator import NodeRuntime
     from rosia.frontend.Connection import OutputPortConnector
 
 T = TypeVar("T")
@@ -11,8 +11,8 @@ T = TypeVar("T")
 
 # This is called by user code to get the value of the port
 class InputPortRuntimeObj(Generic[T]):
-    def __init__(self, parent: "Node", initial_value: T = None) -> None:
-        self.parent = parent
+    def __init__(self, node_runtime: "NodeRuntime", initial_value: T = None) -> None:
+        self.node_runtime = node_runtime
         self.value: T = initial_value
 
     # This is meant to be called by the coordinator to set the value of the user object
@@ -29,16 +29,20 @@ class InputPortRuntimeObj(Generic[T]):
 
 # This is called by user code to set the value of the port
 class OutputPortRuntimeObj(Generic[T]):
-    def __init__(self, parent: "Node", output_port: "OutputPortConnector[T]") -> None:
-        self.parent = parent
-        self.output_port = output_port
+    def __init__(
+        self,
+        node_runtime: "NodeRuntime",
+        output_port_connector: "OutputPortConnector[T]",
+    ) -> None:
+        self.node_runtime = node_runtime
+        self.output_port_connector = output_port_connector
 
     # When the user sets the port, the value is passed to the coordinator to be sent to the downstream ports
     def __set__(self, value: T) -> None:
         raise TypeError("OutputPortRuntimeObj is immutable")
 
     def set_next_timestamp(self, first_timestamp: Time) -> None:
-        self.output_port.set_next_timestamp(first_timestamp)
+        self.output_port_connector.set_next_timestamp(first_timestamp)
 
     def __call__(
         self,
@@ -59,6 +63,6 @@ class OutputPortRuntimeObj(Generic[T]):
             assert next_timestamp is None, (
                 "If timestamp is not provided, next_timestamp must be None"
             )
-            timestamp = self.parent.current_time
-            next_timestamp = self.parent.next_time
-        self.output_port._set_value(value, timestamp, next_timestamp)
+            timestamp = self.node_runtime.current_time
+            next_timestamp = self.node_runtime.next_time
+        self.output_port_connector._set_value(value, timestamp, next_timestamp)

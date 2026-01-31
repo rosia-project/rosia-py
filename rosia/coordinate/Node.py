@@ -7,61 +7,41 @@ from rosia.coordinate.Port import (
 )
 from rosia.frontend.Connection import InputPortConnector, OutputPortConnector
 from rosia.coordinate.messages.base import Message
-from rosia.execute import ExecutorController
-from rosia.utils import NodeInitArgs
-from rosia.frontend.Port import (
-    InputPort as UserInputPort,
-    OutputPort as UserOutputPort,
-)
-
+from rosia.frontend.Port import InputPort, OutputPort
+from rosia.utils import clone_class_detached, empty_function
+from rosia.frontend.Annotators import RosiaAnnotations, check_rosia_annotations
 from typing import Any, Dict, Optional, Tuple, Type, TypeVar, List
 import traceback
 import sys
-import logging
 
 from rosia.time import Time, forever
 
 T = TypeVar("T")
 
 
-def clone_class_detached(original_cls, new_name):
-    new_namespace = dict(original_cls.__dict__)
-    for key in ["__dict__", "__weakref__", "__module__"]:
-        new_namespace.pop(key, None)
-    return type(new_name, original_cls.__bases__, new_namespace)
-
-
-class Node:
+class NodeRuntime:
     def __init__(
         self,
-        node_cls: Type[T],
-        node_init_args: NodeInitArgs,
+        rosia_annotations: RosiaAnnotations,
         node_name: str,
-        transport_cls: Optional[Type[TransportBase]] = None,
-        serializer_cls: Optional[Type[SerializerBase]] = None,
-        log_level: Optional[int] = logging.INFO,
+        transport_cls: Type[TransportBase] = Transport,
+        serializer_cls: Type[SerializerBase] = Serializer,
     ) -> None:
-        self.node_cls = clone_class_detached(node_cls, f"{node_cls.__name__}Node")
+        check_rosia_annotations(rosia_annotations)
+        node_cls = rosia_annotations["original_cls"]
+        self.node_cls = clone_class_detached(
+            node_cls, f"{node_cls.__name__}NodeRuntime"
+        )
+        self.node_original_init = rosia_annotations["original_init"]
+        self.node_init_args = rosia_annotations["init_args"]
         self.node_name = node_name
-        self.log_level = log_level
-        self._setup_logger(log_level)
-        self.executor: ExecutorController
 
-        self.serializer_cls: Type[SerializerBase]
-        self.transport_cls: Type[TransportBase]
-        if serializer_cls is None:
-            self.serializer_cls = Serializer
-        else:
-            self.serializer_cls = serializer_cls
-        if transport_cls is None:
-            self.transport_cls = Transport
-        else:
-            self.transport_cls = transport_cls
+        self.serializer_cls: Type[SerializerBase] = serializer_cls
+        self.transport_cls: Type[TransportBase] = transport_cls
 
         self.transport: Optional[TransportBase] = None
-
-        self.input_port_infos: Dict[str, InputPortConnector[Any]] = {}
-        self.output_port_infos: Dict[str, OutputPortConnector[Any]] = {}
+        self.input_port_connectors: Dict[str, InputPortConnector[Any]] = {}
+        self.output_port_connectors: Dict[str, OutputPortConnector[Any]] = {}
 
         self.current_time: Time = Time(0)
         self.next_time: Time = Time(0)
@@ -71,82 +51,69 @@ class Node:
         self.message_queue: Dict[
             Time, List[Tuple[Message[Any], InputPortConnector[Any]]]
         ] = {}
-        # Initialize output ports
+
         for name, value in self.node_cls.__dict__.items():
-            if isinstance(value, UserOutputPort):
+            if isinstance(value, OutputPort):
                 output_port = OutputPortConnector(
                     owner=self,
                     name=value.name,
                 )
-                output_port_user_object = OutputPortRuntimeObj(self, output_port)
+                output_port_runtime_object = OutputPortRuntimeObj(self, output_port)
                 port_name = f"{self.node_name}.{name}"
-                self.output_port_infos[port_name] = output_port
-                self.__setattr__(name, output_port)
-                setattr(self.node_cls, name, output_port_user_object)
+                self.output_port_connectors[port_name] = output_port
 
-        # Initialize input ports
+                self.__setattr__(name, output_port)
+                setattr(self.node_cls, name, output_port_runtime_object)
+
         for name, value in self.node_cls.__dict__.items():
-            if isinstance(value, UserInputPort):
+            if isinstance(value, InputPort):
                 trigger_functions = value.trigger_functions
-                input_port_user_object = InputPortRuntimeObj(self)
+                input_port_runtime_object = InputPortRuntimeObj(self)
                 affected_output_port_names = list(set(value.affected_output_port_names))
                 affected_output_ports = []
                 for port_name in affected_output_port_names:
                     output_port_name = f"{self.node_name}.{port_name}"
-                    if output_port_name in self.output_port_infos:
+                    if output_port_name in self.output_port_connectors:
                         affected_output_ports.append(
-                            self.output_port_infos[output_port_name]
+                            self.output_port_connectors[output_port_name]
                         )
-                # print("affected output ports", affected_output_ports)
+
                 input_port = InputPortConnector(
                     owner=self,
                     name=value.name,
                     trigger_functions=trigger_functions,
-                    input_port_user_object=input_port_user_object,
+                    input_port_runtime_object=input_port_runtime_object,
                     affected_output_ports=affected_output_ports,
                 )
                 port_name = f"{self.node_name}.{name}"
-                self.input_port_infos[port_name] = input_port
+                self.input_port_connectors[port_name] = input_port
+
                 self.__setattr__(name, input_port)
-                setattr(self.node_cls, name, input_port_user_object)
+                setattr(self.node_cls, name, input_port_runtime_object)
 
-        self.node_init_args = node_init_args
-
-        def stub_init(self, *args, **kwargs):
-            pass
-
-        setattr(self.node_cls, "__init__", stub_init)
+        setattr(
+            self.node_cls, "__init__", empty_function
+        )  # Replace the record_init_args function with empty_function
         self.node_instance = self.node_cls()
-
-    def _setup_logger(self, log_level) -> None:
-        self.logger = logging.getLogger(f"{self.node_name}")
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter("[%(name)s] %(levelname)s %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.setLevel(log_level)
-        self.logger.addHandler(handler)
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
-        self._setup_logger(
-            self.log_level
-        )  # This is necessary to set the logger after unpickling
 
-    def _init_input_transports(self) -> None:
+    def init_input_transports(self) -> None:
         self.transport = self.transport_cls(ClientType.RECEIVER, self.serializer_cls)
-        for name, input_port in self.input_port_infos.items():
+        for name, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
 
-    def _get_input_transport_endpoint_dict(self) -> Dict[str, str]:
+    def get_input_transport_endpoint_dict(self) -> Dict[str, str]:
         # Return a single endpoint for the node (all input ports share the same endpoint)
         if self.transport is None:
             raise RuntimeError("Transport not initialized")
         node_endpoint = self.transport.endpoint
-        return {name: node_endpoint for name in self.input_port_infos.keys()}
+        return {name: node_endpoint for name in self.input_port_connectors.keys()}
 
-    def _set_output_transports(self, intput_endpoints: Dict[str, str]) -> None:
+    def init_output_transports(self, intput_endpoints: Dict[str, str]) -> None:
         downstream_nodes: Dict[str, List[InputPortConnector[Any]]] = {}
-        for name, output_port in self.output_port_infos.items():
+        for name, output_port in self.output_port_connectors.items():
             for downstream_port in output_port.downstream_ports:
                 downstream_node_name = downstream_port.owner.node_name
                 if downstream_node_name not in downstream_nodes:
@@ -169,58 +136,52 @@ class Node:
                 downstream_port.port_type = ClientType.SENDER
                 downstream_port.transport = node_transport
 
-    def _init_node_instance(self) -> None:
-        assert hasattr(self.node_instance, "_original_init"), (
-            "Node instance has no original_init"
+    def init_node_instance(self) -> None:
+        setattr(self.node_instance, "__init__", self.node_original_init)
+        if self.node_init_args is None:
+            raise RuntimeError(
+                f"Node init args are not set for node {self.node_name}. This is a bug within the Rosia framework."
+            )
+        self.node_instance.__init__(
+            self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs
         )
-        if self.node_instance._original_init is not None:  # type: ignore
-            self.node_instance._original_init(
-                *self.node_init_args.args, **self.node_init_args.kwargs
-            )  # type: ignore
 
-    def _get_output_port_safe_to_advance_time(self) -> Dict[str, Time]:
+    def get_output_port_safe_to_advance_time(self) -> Dict[str, Time]:
         output_port_safe_to_advance_time = {}
-        for output_port in self.output_port_infos.values():
+        for output_port in self.output_port_connectors.values():
             output_port_safe_to_advance_time[output_port.name] = (
                 output_port.safe_to_advance_time
             )
         return output_port_safe_to_advance_time
 
-    def _set_output_port_safe_to_advance_time(
+    def set_output_port_safe_to_advance_time(
         self, output_port_to_sta: Dict[str, Time]
     ) -> None:
-        self.logger.debug(
-            f"Setting safe to advance time for input ports based on output ports: {output_port_to_sta}"
-        )
-        for input_port in self.input_port_infos.values():
+        for input_port in self.input_port_connectors.values():
             for output_port in input_port.upstream_ports:
                 if output_port.name in output_port_to_sta.keys():
                     output_port.set_next_timestamp(output_port_to_sta[output_port.name])
-                    self.logger.debug(
-                        f"Set safe to advance time for output port {output_port.name} to {output_port_to_sta[output_port.name]}"
-                    )
             input_port.update_safe_to_advance_time()
 
     def update_safe_to_advance_time(self) -> None:
         old_safe_to_advance_time = self.safe_to_advance_time
         min_safe_to_advance_time = forever
-        for input_port in self.input_port_infos.values():
+        for input_port in self.input_port_connectors.values():
             min_safe_to_advance_time = min(
                 min_safe_to_advance_time, input_port.safe_to_advance_time
             )
-        self.logger.debug(
-            f"Advance time: {old_safe_to_advance_time} -> {min_safe_to_advance_time}"
-        )
+        # print(
+        #     f"Advance time: {old_safe_to_advance_time} -> {min_safe_to_advance_time}"
+        # )
         if old_safe_to_advance_time > min_safe_to_advance_time:
-            self.logger.warning(
+            print(
                 f"Safe to advance time decreased from {old_safe_to_advance_time} to {min_safe_to_advance_time}"
             )
         self.safe_to_advance_time = min_safe_to_advance_time
 
-    def _event_loop(self) -> None:
+    def event_loop(self) -> None:
         if self.transport is None:
             raise RuntimeError("Transport not initialized")
-        self.logger.debug("Starting event loop for node")
         while True:
             while True:
                 message: Optional[Message[Any]] = self.transport.receive()
@@ -231,12 +192,12 @@ class Node:
                 if message.to_port is None:
                     raise ValueError(f"Message missing to_port field: {message}")
 
-                if message.to_port not in self.input_port_infos:
+                if message.to_port not in self.input_port_connectors:
                     raise ValueError(
                         f"Message to_port {message.to_port} not found in node {self.node_name}"
                     )
 
-                input_port = self.input_port_infos[message.to_port]
+                input_port = self.input_port_connectors[message.to_port]
 
                 if message.timestamp is None and message.next_timestamp is None:
                     # This is untimestamped message, we process it immediately
@@ -302,13 +263,13 @@ class Node:
             # Blocking wait for messages on the single node transport
             self.transport.wait_for_message()
 
-    def _execute(self) -> None:
+    def execute(self) -> None:
         try:
             if hasattr(self.node_instance, "start"):
                 self.node_instance.start()
-            self._event_loop()
+            self.event_loop()
         except KeyboardInterrupt:
-            self.logger.debug("KeyboardInterrupt received, shutting down")
+            print("KeyboardInterrupt received, shutting down")
             sys.exit(0)
         except Exception as e:
             print(f"Exception in {self.node_name}: {e}")
