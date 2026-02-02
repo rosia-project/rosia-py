@@ -1,18 +1,24 @@
-from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+import pytest
 import time
+
+from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+from rosia import request_shutdown
+from rosia.time import s
 
 
 @Node
 class IntGenerator:
     output = OutputPort[int]()
-    count = 0
+
+    def __init__(self):
+        self.count = 0
 
     def start(self):
-        while True:
-            print(f"IntGenerator sending: {self.count}")
+        for _ in range(3):
             self.output(self.count)
             self.count += 1
-            time.sleep(1)
+            time.sleep(0.01)
+        request_shutdown(0 * s)
 
 
 @Node
@@ -33,17 +39,15 @@ class Printer:
 
     @reaction([input_int])
     def print_message(self):
-        print(f"Received message: {self.input_int}")
+        pass
 
 
-if __name__ == "__main__":
-    print("Setting up")
+@pytest.mark.timeout(30)
+def test_chain():
     coor = Coordinator()
     int_gen = coor.create_node(IntGenerator())
-    printer = coor.create_node(Printer())
     doubler = coor.create_node(Doubler())
+    printer = coor.create_node(Printer())
     int_gen.output >>= doubler.input_port
     doubler.output_port >>= printer.input_int
-
-    print("Executing...")
     coor.execute()

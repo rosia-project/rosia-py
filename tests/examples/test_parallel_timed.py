@@ -1,4 +1,7 @@
+import pytest
+
 from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+from rosia import request_shutdown
 from rosia.time import Time, ms, s
 from rosia.time.Timer import Timer
 
@@ -22,15 +25,21 @@ class Printer:
     input_int1 = InputPort[int]()
     input_int2 = InputPort[int]()
 
+    def __init__(self):
+        self.receive_count = 0
+
     @reaction([input_int1, input_int2])
     def print_message(self):
         assert self.input_int1 == self.input_int2, (
             "Input ports should have the same value"
         )
-        print(f"Received message: {self.input_int1} {self.input_int2}")
+        self.receive_count += 1
+        if self.receive_count >= 3:
+            request_shutdown(0 * s)
 
 
-if __name__ == "__main__":
+@pytest.mark.timeout(30)
+def test_parallel_timed():
     coor = Coordinator("INFO")
     timer1 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
     timer2 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
@@ -41,6 +50,4 @@ if __name__ == "__main__":
     timer2.output_timer >>= int_gen2.timer
     int_gen1.output >>= printer.input_int1
     int_gen2.output >>= printer.input_int2
-
-    print("Executing...")
     coor.execute()

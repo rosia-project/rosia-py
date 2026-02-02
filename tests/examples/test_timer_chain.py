@@ -1,4 +1,7 @@
+import pytest
+
 from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+from rosia import request_shutdown
 from rosia.time import Time, s
 from rosia.time.Timer import Timer
 
@@ -21,17 +24,22 @@ class IntGenerator:
 class Printer:
     input_timer = InputPort[Time]()
 
+    def __init__(self):
+        self.receive_count = 0
+
     @reaction([input_timer])
     def print_message(self):
-        print(f"Received message: {self.input_timer}")
+        self.receive_count += 1
+        if self.receive_count >= 3:
+            request_shutdown(0 * s)
 
 
-if __name__ == "__main__":
+@pytest.mark.timeout(30)
+def test_timer_chain():
     coor = Coordinator()
     timer_node = coor.create_node(Timer(interval=1 * s, offset=0 * s))
     int_generator = coor.create_node(IntGenerator())
     printer = coor.create_node(Printer())
     timer_node.output_timer >>= int_generator.input_port
     int_generator.output_port >>= printer.input_timer
-
     coor.execute()

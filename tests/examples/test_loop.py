@@ -1,5 +1,9 @@
-from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+import pytest
 import time
+
+from rosia import InputPort, OutputPort, reaction, Node, Coordinator
+from rosia import request_shutdown
+from rosia.time import s
 
 
 @Node
@@ -12,9 +16,10 @@ class Worker:
 
     @reaction([input_int])
     def forward(self):
-        print(f"Worker received message: {self.input_int}")
         self.output_int(self.input_int)
-        time.sleep(1)
+        if self.input_int >= 3:
+            request_shutdown(0 * s)
+        time.sleep(0.01)
 
 
 @Node
@@ -27,7 +32,8 @@ class Manager:
         self.output_int(self.input_int + 1)
 
 
-if __name__ == "__main__":
+@pytest.mark.timeout(30)
+def test_loop():
     coor = Coordinator()
     worker = coor.create_node(Worker())
     manager = coor.create_node(Manager())

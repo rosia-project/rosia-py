@@ -20,6 +20,7 @@ from rosia.coordinate.messages.base import (
     ShutdownMessage,
     CoordinatorShutdownRequestMessage,
 )
+from rosia.time import s
 
 T = TypeVar("T")
 
@@ -199,6 +200,8 @@ class NodeRuntime:
             if message is None:
                 break
 
+            self.logger.debug(f"Received message: {message}")
+
             if isinstance(message, ShutdownMessage):
                 shutdown_timestamp = message.timestamp
                 self.message_queue[shutdown_timestamp] = [message]  # type: ignore
@@ -281,7 +284,13 @@ class NodeRuntime:
             del self.message_queue[timestamp]
 
             for trigger_function in trigger_functions:
-                trigger_function(self.node_instance)
+                try:
+                    trigger_function(self.node_instance)
+                except Exception as e:
+                    print(f"Exception in trigger function {trigger_function}: {e}")
+                    traceback.print_exc()
+                    self.request_shutdown(0 * s, status_code=1)
+                    sys.exit(1)
             for output_port in affected_output_ports:
                 # The output may not be set by the user code, but we need to update the downstream STA
                 output_port._set_value(None, None, self.next_time)
@@ -308,10 +317,10 @@ class NodeRuntime:
             traceback.print_exc()
             sys.exit(1)
 
-    def request_shutdown(self, delay: Time = Time(0)) -> None:
+    def request_shutdown(self, delay: Time = Time(0), status_code: int = 0) -> None:
         self.logger.debug(
             f"Requesting shutdown of node {self.node_name} with delay {delay}"
         )
         self.coordinator_receiver_transport.send(
-            CoordinatorShutdownRequestMessage(delay)
+            CoordinatorShutdownRequestMessage(timestamp=delay, status_code=status_code)
         )

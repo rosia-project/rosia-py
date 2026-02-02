@@ -26,7 +26,7 @@ class Message(MessageBase[T]):
 
 @dataclass
 class CoordinatorShutdownRequestMessage(MessageBase):
-    pass
+    status_code: int
 
 
 @dataclass

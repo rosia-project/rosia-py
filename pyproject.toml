@@ -28,7 +28,13 @@ dev = [
     "pre-commit",
     "twine",
     "build",
+    "pytest",
+    "pytest-timeout",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 30
 
 [project.urls]
 Homepage = "https://github.com/rosia-project/rosia"

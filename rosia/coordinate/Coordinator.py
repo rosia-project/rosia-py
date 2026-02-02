@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import logging
 from rosia.frontend.Annotators import get_rosia_annotations, check_rosia_annotations
 from rosia.coordinate.messages.base import CoordinatorShutdownRequestMessage
+import sys
 
 T = TypeVar("T")
 
@@ -119,6 +120,7 @@ class Coordinator:
         if not isinstance(message, CoordinatorShutdownRequestMessage):
             raise ValueError("Expected CoordinatorShutdownMessage")
         shutdown_timestamp = message.timestamp
+        status_code = message.status_code
         for name, node_info in self.node_infos.items():
             self.coordinator_sender_transport = Transport(
                 ClientType.SENDER, Serializer, self.node_endpoints[name]
@@ -128,6 +130,8 @@ class Coordinator:
                     timestamp=shutdown_timestamp,
                 )
             )
+        if status_code != 0:
+            sys.exit(status_code)
 
     def set_value(self, port: T, value: T) -> None:
         """setting values with timestamps is not supported in the coordinator"""
