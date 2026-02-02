@@ -4,6 +4,6 @@
 /.ruff_cache/
 
 # Artifacts
+.pytest_cache/
 **/__pycache__/
 **/*.pyc
-
