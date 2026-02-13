@@ -1,0 +1,188 @@
+"""Graph building and layout for rosia node visualization."""
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+
+from pyelk import ELK
+
+from rosia.diagram.constants import (
+    CHAR_WIDTH,
+    PORT_ROW_HEIGHT,
+    NODE_PADDING,
+    PORT_GAP,
+    MIN_NODE_SIZE,
+)
+from rosia.diagram.rerun_renderer import render_to_rerun
+
+if TYPE_CHECKING:
+    from rosia.coordinate.Coordinator import NodeRuntimeInfo
+
+
+@dataclass
+class Port:
+    id: str
+    short_name: str
+    is_input: bool
+    y: float = 0  # Relative Y position (set by ELK)
+
+
+@dataclass
+class Node:
+    id: str
+    name: str
+    node_type: str
+    ports: List[Port]
+    init_args: Optional[object] = None
+    x: float = 0
+    y: float = 0
+    width: float = 0
+    height: float = 0
+
+
+@dataclass
+class Edge:
+    source_port: str
+    target_port: str
+
+
+@dataclass
+class Graph:
+    nodes: List[Node] = field(default_factory=list)
+    edges: List[Edge] = field(default_factory=list)
+
+
+def diagram(node_infos: "Dict[str, NodeRuntimeInfo]") -> None:
+    """Main entry point: build graph, layout with ELK, and render to rerun."""
+    if not node_infos:
+        return
+
+    graph = build_graph(node_infos)
+    layout_graph(graph)
+    render_to_rerun(graph)
+
+
+def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
+    """Convert node runtime info to graph representation."""
+    graph = Graph()
+
+    for node_name, node_info in node_infos.items():
+        runtime = node_info.node
+        node_type = runtime.node_cls.__name__.replace("NodeRuntime", "")
+
+        # Get init args from class annotations
+        init_args = None
+        if hasattr(runtime.node_cls, "_rosia_annotations"):
+            init_args = runtime.node_cls._rosia_annotations.get("init_args")
+
+        # Build ports
+        ports = []
+        for port_name in runtime.input_port_connectors:
+            short_name = port_name.split(".", 1)[1]
+            ports.append(Port(id=port_name, short_name=short_name, is_input=True))
+
+        for port_name in runtime.output_port_connectors:
+            short_name = port_name.split(".", 1)[1]
+            ports.append(Port(id=port_name, short_name=short_name, is_input=False))
+
+        # Compute node size
+        width, height = _compute_node_size(node_name, ports)
+
+        graph.nodes.append(
+            Node(
+                id=node_name,
+                name=node_name,
+                node_type=node_type,
+                ports=ports,
+                init_args=init_args,
+                width=width,
+                height=height,
+            )
+        )
+
+        # Build edges
+        for port_name, connector in runtime.output_port_connectors.items():
+            for downstream in connector.downstream_ports:
+                graph.edges.append(
+                    Edge(source_port=port_name, target_port=downstream.name)
+                )
+
+    return graph
+
+
+def _compute_node_size(name: str, ports: List[Port]) -> Tuple[float, float]:
+    """Compute node dimensions based on name and ports."""
+    input_ports = [p for p in ports if p.is_input]
+    output_ports = [p for p in ports if not p.is_input]
+
+    max_ports = max(len(input_ports), len(output_ports), 1)
+    height = NODE_PADDING[0] + max_ports * PORT_ROW_HEIGHT + NODE_PADDING[1]
+
+    name_width = len(name) * CHAR_WIDTH + 2 * NODE_PADDING[2]
+    max_in_len = max((len(p.short_name) for p in input_ports), default=0)
+    max_out_len = max((len(p.short_name) for p in output_ports), default=0)
+    port_width = (
+        (max_in_len + max_out_len) * CHAR_WIDTH + PORT_GAP + 2 * NODE_PADDING[2]
+    )
+
+    return (
+        max(name_width, port_width, MIN_NODE_SIZE[0]),
+        max(height, MIN_NODE_SIZE[1]),
+    )
+
+
+def layout_graph(graph: Graph) -> None:
+    """Use ELK to compute node and port positions."""
+    # Convert to ELK format
+    elk_children = []
+    for node in graph.nodes:
+        elk_ports = [
+            {
+                "id": p.id,
+                "width": 10,
+                "height": 10,
+                "layoutOptions": {"elk.port.side": "WEST" if p.is_input else "EAST"},
+            }
+            for p in node.ports
+        ]
+        elk_children.append(
+            {
+                "id": node.id,
+                "width": node.width,
+                "height": node.height,
+                "ports": elk_ports,
+                "layoutOptions": {"elk.portConstraints": "FIXED_SIDE"},
+            }
+        )
+
+    elk_edges = [
+        {"id": f"e{i}", "sources": [e.source_port], "targets": [e.target_port]}
+        for i, e in enumerate(graph.edges)
+    ]
+
+    elk_graph = {
+        "id": "root",
+        "layoutOptions": {
+            "elk.algorithm": "layered",
+            "elk.direction": "RIGHT",
+            "elk.spacing.nodeNode": "60",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+        },
+        "children": elk_children,
+        "edges": elk_edges,
+    }
+
+    # Run ELK layout
+    result = ELK().layout(elk_graph)
+
+    # Copy positions back to our graph
+    node_map = {n.id: n for n in graph.nodes}
+    for elk_node in result.get("children", []):
+        node = node_map.get(elk_node["id"])
+        if node:
+            node.x = elk_node["x"]
+            node.y = elk_node["y"]
+            port_map = {p.id: p for p in node.ports}
+            for elk_port in elk_node.get("ports", []):
+                port = port_map.get(elk_port["id"])
+                if port:
+                    port.y = elk_port.get("y", 0)

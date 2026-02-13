@@ -7,5 +7,6 @@
 .pytest_cache/
 **/__pycache__/
 **/*.pyc
+**/.DS_Store
 
-rosia/visualize/sprotty-frontend/
+rosia/diagram/sprotty-frontend/
