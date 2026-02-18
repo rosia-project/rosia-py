@@ -11,6 +11,7 @@ from rosia.diagram.constants import (
     NODE_PADDING,
     PORT_GAP,
     MIN_NODE_SIZE,
+    ICON_NODES,
 )
 from rosia.diagram.rerun_renderer import render_to_rerun
 
@@ -85,7 +86,7 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
             ports.append(Port(id=port_name, short_name=short_name, is_input=False))
 
         # Compute node size
-        width, height = _compute_node_size(node_name, ports)
+        width, height = _compute_node_size(node_name, ports, node_type)
 
         graph.nodes.append(
             Node(
@@ -109,7 +110,9 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
     return graph
 
 
-def _compute_node_size(name: str, ports: List[Port]) -> Tuple[float, float]:
+def _compute_node_size(
+    name: str, ports: List[Port], node_type: str
+) -> Tuple[float, float]:
     """Compute node dimensions based on name and ports."""
     input_ports = [p for p in ports if p.is_input]
     output_ports = [p for p in ports if not p.is_input]
@@ -117,15 +120,22 @@ def _compute_node_size(name: str, ports: List[Port]) -> Tuple[float, float]:
     max_ports = max(len(input_ports), len(output_ports), 1)
     height = NODE_PADDING[0] + max_ports * PORT_ROW_HEIGHT + NODE_PADDING[1]
 
-    name_width = len(name) * CHAR_WIDTH + 2 * NODE_PADDING[2]
-    max_in_len = max((len(p.short_name) for p in input_ports), default=0)
-    max_out_len = max((len(p.short_name) for p in output_ports), default=0)
-    port_width = (
-        (max_in_len + max_out_len) * CHAR_WIDTH + PORT_GAP + 2 * NODE_PADDING[2]
-    )
+    # For icon nodes (like Timer), use configured width or default minimum
+    is_icon_node = node_type in ICON_NODES
+    if is_icon_node:
+        icon_config = ICON_NODES[node_type]
+        width = icon_config.get("width", MIN_NODE_SIZE[0])
+    else:
+        name_width = len(name) * CHAR_WIDTH + 2 * NODE_PADDING[2]
+        max_in_len = max((len(p.short_name) for p in input_ports), default=0)
+        max_out_len = max((len(p.short_name) for p in output_ports), default=0)
+        port_width = (
+            (max_in_len + max_out_len) * CHAR_WIDTH + PORT_GAP + 2 * NODE_PADDING[2]
+        )
+        width = max(name_width, port_width, MIN_NODE_SIZE[0])
 
     return (
-        max(name_width, port_width, MIN_NODE_SIZE[0]),
+        width,
         max(height, MIN_NODE_SIZE[1]),
     )
 

@@ -32,8 +32,10 @@ COLORS = {
 
 # Icon node configuration (unscaled values)
 # - connection_inset: horizontal inset from icon edge for line connection
+# - width: node width (if not specified, uses MIN_NODE_SIZE[0])
 ICON_NODES = {
     "Timer": {
         "connection_inset": 10,
+        "width": 60.0,
     },
 }
