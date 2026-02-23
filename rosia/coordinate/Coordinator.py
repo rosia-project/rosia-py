@@ -11,6 +11,7 @@ import logging
 from rosia.frontend.Annotators import get_rosia_annotations, check_rosia_annotations
 from rosia.coordinate.messages.base import CoordinatorShutdownRequestMessage
 import sys
+from rosia.time.utils import get_physical_time
 
 T = TypeVar("T")
 
@@ -118,7 +119,10 @@ class Coordinator:
 
         for name, node_info in self.node_infos.items():
             assert node_info.executor is not None
-            node_info.executor.call_no_ret("execute")
+            current_physical_time = get_physical_time()
+            node_info.executor.call_no_ret(
+                "execute", start_logical_time=current_physical_time
+            )
 
         # Wait for shutdown request
         self.coordinator_receiver_transport.wait_for_message()

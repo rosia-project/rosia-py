@@ -1,6 +1,6 @@
 from rosia.frontend import OutputPort, Node
 from rosia.time import Time
-import time
+from rosia.time.utils import sleep_until_physical_time
 
 
 @Node
@@ -12,7 +12,8 @@ class Timer:
         self.time_current = offset
         self.output_timer.set_next_timestamp(self.time_current)
 
-    def start(self):
+    def start(self, start_logical_time: Time):
+        self.start_logical_time = start_logical_time
         while True:
             self.output_timer(
                 self.time_current,
@@ -20,4 +21,4 @@ class Timer:
                 next_timestamp=self.time_current + self.interval,
             )
             self.time_current += self.interval
-            time.sleep(self.interval.to_seconds())
+            sleep_until_physical_time(self.time_current + self.start_logical_time)

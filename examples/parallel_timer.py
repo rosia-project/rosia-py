@@ -1,6 +1,6 @@
 from rosia import InputPort, OutputPort, reaction, Node, Coordinator
 from rosia import request_shutdown
-from rosia.time import Time, ms, s
+from rosia.time import Time, s
 from rosia.time.Timer import Timer
 
 
@@ -31,15 +31,17 @@ class Printer:
         assert self.input_int1 == self.input_int2, (
             "Input ports should have the same value"
         )
+        print(f"Received message: {self.input_int1} {self.input_int2}")
         self.receive_count += 1
         if self.receive_count >= 3:
+            print("Shutting down")
             request_shutdown(0 * s)
 
 
 if __name__ == "__main__":
     coor = Coordinator("INFO", diagram=True)
-    timer1 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
-    timer2 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
+    timer1 = coor.create_node(Timer(interval=1 * s, offset=0 * s))
+    timer2 = coor.create_node(Timer(interval=1 * s, offset=0 * s))
     int_gen1 = coor.create_node(IntGenerator())
     int_gen2 = coor.create_node(IntGenerator())
     printer = coor.create_node(Printer())

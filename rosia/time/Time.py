@@ -2,13 +2,17 @@ TIME_DIVISOR = 1000
 
 
 class Time:
-    def __init__(self, value: int, force: bool = False):
+    def __init__(
+        self,
+        value: int,
+    ):
         self.value = value
-        if value < 0 and not force:
-            raise ValueError("Time cannot be negative")
 
     def to_seconds(self) -> float:
         return self.value / s.value
+
+    def to_unix_time(self) -> float:
+        return self.value / (TIME_DIVISOR * 1e9)
 
     def __add__(self, other) -> "Time":
         assert isinstance(other, Time), "Cannot add Time to non-Time"
@@ -122,8 +126,8 @@ s = Time(1_000_000_000 * TIME_DIVISOR)
 ms = Time(1_000_000 * TIME_DIVISOR)
 us = Time(1_000 * TIME_DIVISOR)
 ns = Time(1 * TIME_DIVISOR)
-never = Time(-1, force=True)
-forever = Time(int(1e18), force=True)
+never = Time(-1)
+forever = Time(int(1e18))
 
 if __name__ == "__main__":
     x = 1 * s

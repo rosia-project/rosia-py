@@ -21,6 +21,7 @@ from rosia.coordinate.messages.base import (
     CoordinatorShutdownRequestMessage,
 )
 from rosia.time import s
+import inspect
 
 T = TypeVar("T")
 
@@ -303,11 +304,21 @@ class NodeRuntime:
             # Blocking wait for messages on the single node transport
             self.transport.wait_for_message()
 
-    def execute(self) -> None:
+    def execute(self, start_logical_time: Time) -> None:
         self.logger.debug(f"Executing node {self.node_name}")
         try:
             if hasattr(self.node_instance, "start"):
-                self.node_instance.start()
+                if not inspect.signature(self.node_instance.start).parameters:
+                    self.node_instance.start()
+                elif (
+                    "start_logical_time"
+                    in inspect.signature(self.node_instance.start).parameters
+                ):
+                    self.node_instance.start(start_logical_time=start_logical_time)
+                else:
+                    raise ValueError(
+                        f"Node {self.node_name} has a start method with an unexpected signature: {inspect.signature(self.node_instance.start)}"
+                    )
             self.event_loop()
         except KeyboardInterrupt:
             print("KeyboardInterrupt received, shutting down")
