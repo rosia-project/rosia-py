@@ -23,7 +23,6 @@ from rosia.time import s
 import inspect
 from rosia.time.utils import get_physical_time
 from rosia.config import ExecutionConfig
-from rosia.rerun.initialize import RerunConnector
 
 T = TypeVar("T")
 
@@ -222,14 +221,12 @@ class NodeRuntime:
 
     def log_trace(self) -> None:
         if self.execution_config.trace:
-            if not hasattr(self, "_rerun_connector"):
-                self._rerun_connector = RerunConnector(self.execution_config)
             physical_time_val = (
                 get_physical_time().to_unix_time()
                 - self.start_logical_time.to_unix_time()
             )
             lag = physical_time_val - self.current_time.to_unix_time()
-            self._rerun_connector.trace(
+            rosia.rerun_manager.trace(
                 self.node_name,
                 self.current_time,
                 Time.from_unix_time(physical_time_val),

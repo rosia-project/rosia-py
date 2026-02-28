@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
-from pyelk import ELK
+from pyelk import ELK  # pyright: ignore[reportMissingImports]
 
 from rosia.diagram.constants import (
     CHAR_WIDTH,
@@ -14,7 +14,7 @@ from rosia.diagram.constants import (
     ICON_NODES,
 )
 from rosia.diagram.renderer import render_graph
-from rosia.rerun.initialize import RerunConnector
+import rosia
 
 if TYPE_CHECKING:
     from rosia.coordinate.Coordinator import NodeRuntimeInfo
@@ -53,17 +53,15 @@ class Graph:
     edges: List[Edge] = field(default_factory=list)
 
 
-def diagram(
-    node_infos: "Dict[str, NodeRuntimeInfo]", rerun_connector: RerunConnector
-) -> None:
+def diagram(node_infos: "Dict[str, NodeRuntimeInfo]") -> None:
     """Main entry point: build graph, layout with ELK, and render to rerun."""
     if not node_infos:
         return
 
     graph = build_graph(node_infos)
     layout_graph(graph)
-    rerun_connector.send_blueprint()
-    rerun_connector.render_diagram(render_graph(graph))
+    rosia.rerun_manager.send_blueprint()
+    rosia.rerun_manager.render_diagram(render_graph(graph))
 
 
 def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:

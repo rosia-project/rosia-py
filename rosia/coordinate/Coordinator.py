@@ -13,8 +13,8 @@ from rosia.coordinate.messages.base import CoordinatorShutdownRequestMessage
 import sys
 from rosia.time.utils import get_physical_time
 from rosia.diagram import diagram
-from rosia.rerun.initialize import RerunConnector
-
+from rosia.config import RerunConfig
+import rosia
 
 T = TypeVar("T")
 
@@ -45,9 +45,10 @@ class Coordinator:
         self.node_infos[node_name] = NodeRuntimeInfo(node=node_runtime, executor=None)
         return cast(T, node_runtime)
 
-    def diagram(self, execution_config: ExecutionConfig = ExecutionConfig()) -> None:
-        rerun_connector = RerunConnector(execution_config)
-        diagram(self.node_infos, rerun_connector)
+    def diagram(self, rerun_config: RerunConfig = RerunConfig()) -> None:
+        rosia.rerun_manager.set_rerun_config(rerun_config)
+        rosia.rerun_manager.init()
+        diagram(self.node_infos)
 
     def execute(self, execution_config: ExecutionConfig = ExecutionConfig()) -> None:
         self.execution_config = execution_config
