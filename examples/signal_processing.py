@@ -10,6 +10,7 @@ filtered output side-by-side.
 
 import numpy as np
 import rerun as rr
+import rerun.blueprint as rrb
 
 from rosia import InputPort, OutputPort, reaction, Node, Coordinator
 from rosia import request_shutdown, log
@@ -121,4 +122,11 @@ if __name__ == "__main__":
     lpf.output_signal >>= printer.input_signal
 
     coor.diagram()
+    rr.send_blueprint(
+        rrb.Blueprint(
+            rrb.Horizontal(
+                rrb.TimeSeriesView(origin="/"),
+            )
+        )
+    )
     coor.execute(trace=True, log_level="INFO")

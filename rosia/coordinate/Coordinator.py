@@ -166,7 +166,9 @@ class Coordinator:
         self.logger.set_logical_time(shutdown_timestamp)
         self.logger.set_physical_time(get_physical_time() - start_physical_time)
         for name, node_info in self.node_infos.items():
-            self.logger.debug(f"Sending shutdown request to node: {name}")
+            self.logger.debug(
+                f"Sending shutdown request to node: {name} with timestamp {shutdown_timestamp}"
+            )
             self.coordinator_sender_transport = Transport(
                 ClientType.SENDER, Serializer, self.node_endpoints[name]
             )

@@ -63,9 +63,14 @@ class OutputPortRuntimeObj(Generic[T]):
             assert next_timestamp is None, (
                 "If timestamp is not provided, next_timestamp must be None"
             )
-            timestamp = self.node_runtime.current_time
+            timestamp = self.node_runtime.current_logical_time
             next_timestamp = self.node_runtime.next_time
         self.node_runtime.receive_messages()
         self.node_runtime.update_safe_to_advance_time()
-        self.node_runtime.advance_time(advance_until=timestamp)
+        self.node_runtime.process_messages(advance_until=timestamp)
+        self.node_runtime.advance_logical_time(timestamp)
+        print(
+            f"Setting value {value} at time {timestamp}, next timestamp {next_timestamp}"
+        )
         self.output_port_connector._set_value(value, timestamp, next_timestamp)
+        self.node_runtime.check_shutdown()
