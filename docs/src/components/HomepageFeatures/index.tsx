@@ -13,32 +13,17 @@ const FeatureList: FeatureItem[] = [
   {
     title: "Performance",
     image: "/img/features/performant.png",
-    description: (
-      <>
-        Rosia is designed from the ground up to be performant and efficient with
-        low latency.
-      </>
-    ),
+    description: <>Rosia is designed from the ground up to be performant and efficient with low latency.</>,
   },
   {
     title: "Deterministic and Reproducible",
     image: "/img/features/deterministic.png",
-    description: (
-      <>
-        Rosia is deterministic and reproducible, ensuring that the same results
-        are obtained regardless of the runtime.
-      </>
-    ),
+    description: <>Rosia is deterministic and reproducible, ensuring that the same results are obtained regardless of the runtime.</>,
   },
   {
     title: "Fully Pythonic",
     image: "/img/features/python.png",
-    description: (
-      <>
-        Rosia is designed to be fully Pythonic, allowing you to use it in your
-        existing Python projects.
-      </>
-    ),
+    description: <>Rosia is designed to be fully Pythonic, allowing you to use it in your existing Python projects.</>,
   },
 ];
 
