@@ -21,6 +21,12 @@ repos:
         files: \.(c|cc|cpp|cxx|h|hpp|hxx)$
   - repo: local
     hooks:
+      - id: docs format
+        name: docs format
+        entry: yarn --cwd docs format
+        language: system
+        files: ^docs/
+        pass_filenames: false
       - id: docs-format-check
         name: docs format check
         entry: yarn --cwd docs format:check
