@@ -1,0 +1,9 @@
+docs:
+  label: Docs
+  permalink: /docs
+  description: Rosia documentation
+
+blog:
+  label: Blog
+  permalink: /blogs
+  description: Rosia's blog

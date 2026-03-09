@@ -1,0 +1,11 @@
+shulu:
+  name: Shulu Li
+  title: PhD Student at University of California, Berkeley
+  url: https://linkedin.com/in/shulu-li
+  image_url: https://github.com/depetrol.png
+  page: true
+  socials:
+    linkedin: shulu-li
+    github: depetrol
+    # newsletter: https://www.greatfrontend.com
+    # x: none
