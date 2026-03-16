@@ -16,8 +16,10 @@ import sys
 from rosia.time import Time, forever
 import rosia
 from rosia.coordinate.messages.base import (
+    MessageBase,
     ShutdownMessage,
     CoordinatorShutdownRequestMessage,
+    NoMoreMessage,
 )
 from rosia.coordinate.Events import InputPortEvent, ShutdownEvent, EventQueue
 from rosia.time import s
@@ -118,6 +120,7 @@ class NodeRuntime:
         self.transport = self.transport_cls(ClientType.RECEIVER, self.serializer_cls)
         for _, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
+            input_port.active_upstream_count = len(input_port.upstream_ports)
         return {self.node_name: self.transport.endpoint}
 
     def init_output_transports(self, node_endpoints: Dict[str, str]) -> None:
@@ -184,7 +187,7 @@ class NodeRuntime:
 
     def drain_message_queue(self) -> None:
         while True:
-            message: Optional[Message[Any]] = self.transport.receive()
+            message: Optional[MessageBase[Any]] = self.transport.receive()
             if message is None:
                 break
 
@@ -195,6 +198,23 @@ class NodeRuntime:
                 if message.timestamp is None:
                     raise ValueError("Shutdown message timestamp is None")
                 self.event_queue.push_shutdown_event(message.timestamp)
+            elif isinstance(message, NoMoreMessage):
+                if message.to_port not in self.input_port_connectors:
+                    raise ValueError(
+                        f"NoMoreMessage to_port {message.to_port} not found in node {self.node_name}"
+                    )
+                input_port = self.input_port_connectors[message.to_port]
+                input_port.active_upstream_count -= 1
+                # Set upstream port ENT to forever so STAT can advance
+                from_output_port = input_port.get_upstream_port_by_name(
+                    message.from_port
+                )
+                from_output_port.safe_to_advance_time = forever
+                input_port.update_safe_to_advance_time()
+                self.logger.debug(
+                    f"Received NoMoreMessage from {message.from_port}, "
+                    f"active_upstream_count={input_port.active_upstream_count}"
+                )
             elif isinstance(message, Message):
                 if message.to_port is None:
                     raise ValueError(f"Message missing to_port field: {message}")
@@ -301,6 +321,26 @@ class NodeRuntime:
             else:
                 self.transport.wait_for_message()
 
+    def _all_upstream_done(self) -> bool:
+        if not self.input_port_connectors:
+            return False  # Source nodes handled separately
+        for input_port in self.input_port_connectors.values():
+            if input_port.active_upstream_count > 0:
+                return False
+        return True
+
+    def send_no_more_messages(self) -> None:
+        for output_port in self.output_port_connectors.values():
+            for downstream_port in output_port.downstream_ports:
+                if downstream_port.transport is not None:
+                    downstream_port.transport.send(
+                        NoMoreMessage(
+                            timestamp=None,
+                            from_port=output_port.name,
+                            to_port=downstream_port.name,
+                        )
+                    )
+
     def event_loop(self) -> None:
         while not self.shutdown_requested:
             self.drain_message_queue()
@@ -309,6 +349,10 @@ class NodeRuntime:
 
             if self.event_queue and self.event_queue.peek_time() < self.STAT:
                 self.advance_logical_time(to_time=self.STAT)
+            elif not self.event_queue and self._all_upstream_done():
+                self.send_no_more_messages()
+                self.request_shutdown(0 * s, status_code=0)
+                self.shutdown_requested = True
             else:
                 self.transport.wait_for_message()
 
@@ -327,7 +371,14 @@ class NodeRuntime:
                     raise ValueError(
                         f"Node {self.node_name} has a start method with an unexpected signature: {inspect.signature(self.node_instance.start)}"
                     )
-            self.event_loop()
+
+            # Source nodes: if no input ports and no pending events, send NoMoreMessage
+            if not self.input_port_connectors and not self.event_queue:
+                self.send_no_more_messages()
+                self.shutdown_requested = True
+
+            if not self.shutdown_requested:
+                self.event_loop()
             # Shutdown after loop exits
             if hasattr(self.node_instance, "shutdown"):
                 self.node_instance.shutdown()

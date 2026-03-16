@@ -43,6 +43,7 @@ class InputPortConnector(PortConnector[T]):
             None  # Only set for SENDER ports (downstream ports of output ports)
         )
         self.affected_output_ports: List[OutputPortConnector[T]] = affected_output_ports
+        self.active_upstream_count: int = 0  # Set during coordinator setup
 
     def __set__(self, args: List[Any], kwargs: Dict[str, Any]) -> None:
         raise TypeError("InputPort is immutable")

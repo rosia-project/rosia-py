@@ -32,3 +32,9 @@ class CoordinatorShutdownRequestMessage(MessageBase):
 @dataclass
 class ShutdownMessage(MessageBase):
     pass
+
+
+@dataclass
+class NoMoreMessage(MessageBase):
+    from_port: str
+    to_port: str
