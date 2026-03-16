@@ -45,6 +45,7 @@ class Node:
 class Edge:
     source_port: str
     target_port: str
+    bend_points: List[Tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -70,6 +71,7 @@ def diagram(
 
     graph = build_graph(node_infos)
     layout_graph(graph)
+
     image = render_graph(graph)
 
     if save_to:
@@ -194,6 +196,7 @@ def layout_graph(graph: Graph) -> None:
             "elk.direction": "RIGHT",
             "elk.spacing.nodeNode": "60",
             "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+            "elk.edgeRouting": "ORTHOGONAL",
         },
         "children": elk_children,
         "edges": elk_edges,
@@ -214,3 +217,14 @@ def layout_graph(graph: Graph) -> None:
                 port = port_map.get(elk_port["id"])
                 if port:
                     port.y = elk_port.get("y", 0)
+
+    # Extract edge bend points from ELK result
+    edge_map = {f"e{i}": e for i, e in enumerate(graph.edges)}
+    for elk_edge in result.get("edges", []):
+        edge = edge_map.get(elk_edge["id"])
+        if edge:
+            for section in elk_edge.get("sections", []):
+                bend_points = []
+                for bp in section.get("bendPoints", []):
+                    bend_points.append((bp["x"], bp["y"]))
+                edge.bend_points = bend_points

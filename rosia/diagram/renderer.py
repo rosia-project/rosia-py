@@ -28,25 +28,44 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 
 
 def render_graph(graph: "Graph") -> Image.Image:
-    """Render a graph to a PIL Image."""
-    # Calculate canvas size
-    max_x = max((n.x + n.width for n in graph.nodes), default=0)
-    max_y = max((n.y + n.height for n in graph.nodes), default=0)
-    width = int(max_x * SCALE + 2 * PADDING)
-    height = int(max_y * SCALE + 2 * PADDING)
+    """Render a graph to a PIL Image.
 
-    # Create image and drawing context
+    All edge routing is computed by pyelk. The renderer just draws nodes
+    and edges using the bend points provided.
+    """
+    # Compute bounds from nodes AND bend points
+    all_x = [n.x + n.width for n in graph.nodes]
+    all_y_min = [n.y for n in graph.nodes]
+    all_y_max = [n.y + n.height for n in graph.nodes]
+    for edge in graph.edges:
+        for bx, by in edge.bend_points:
+            all_x.append(bx)
+            all_y_min.append(by)
+            all_y_max.append(by)
+
+    max_x = max(all_x, default=0)
+    min_y = min(all_y_min, default=0)
+    max_y = max(all_y_max, default=0)
+
+    # Shift everything so negative y-coords (edges above graph) become positive
+    y_offset = max(0, -min_y + 20)
+
+    width = int(max_x * SCALE + 2 * PADDING)
+    height = int((max_y + y_offset + 20) * SCALE + 2 * PADDING)
+
     img = Image.new("RGB", (width, height), COLORS["background"])
     draw = ImageDraw.Draw(img)
     font, port_font = _load_fonts()
-
-    # Load icons
     icons = {name: _load_icon(name.lower()) for name in ICON_NODES.keys()}
 
-    # Build port position map for edges
+    # Apply y_offset to nodes and bend points
+    for n in graph.nodes:
+        n.y += y_offset
+    for e in graph.edges:
+        e.bend_points = [(bx, by + y_offset) for bx, by in e.bend_points]
+
     port_positions = _build_port_positions(graph, icons)
 
-    # Draw nodes and edges
     for node in graph.nodes:
         _draw_node(img, draw, node, font, port_font, icons)
 
@@ -246,7 +265,7 @@ def _draw_edge(
     edge: "Edge",
     port_positions: Dict[str, Tuple[float, float]],
 ) -> None:
-    """Draw an orthogonal edge between ports."""
+    """Draw an orthogonal forward edge using ELK bend points."""
     src = port_positions.get(edge.source_port)
     tgt = port_positions.get(edge.target_port)
 
@@ -255,7 +274,28 @@ def _draw_edge(
 
     sx, sy = src
     tx, ty = tgt
-    mx = (sx + tx) / 2
 
-    points = [(sx, sy), (mx, sy), (mx, ty), (tx, ty)]
+    if edge.bend_points:
+        # Build orthogonal path through bend points.
+        # Route: source → H to first bend x → V to first bend y →
+        #        H to next bend x → V to next bend y → ... → target
+        scaled = [_scale_pos(x, y) for x, y in edge.bend_points]
+        points = [(sx, sy)]
+        cur_y = sy
+        for bx, by in scaled:
+            points.append((bx, cur_y))
+            cur_y = by
+            points.append((bx, cur_y))
+        # Final horizontal into target port
+        points.append((tx, cur_y))
+        if abs(cur_y - ty) > 1:
+            points.append((tx, ty))
+    else:
+        # Adjacent layers, no bend points — simple midpoint routing
+        mx = (sx + tx) / 2
+        if abs(sy - ty) > 1:
+            points = [(sx, sy), (mx, sy), (mx, ty), (tx, ty)]
+        else:
+            points = [(sx, sy), (tx, ty)]
+
     draw.line(points, fill=COLORS["edge"], width=EDGE_WIDTH)
