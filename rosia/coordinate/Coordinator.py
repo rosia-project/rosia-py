@@ -55,11 +55,12 @@ class Coordinator:
         rerun_config: RerunConfig = RerunConfig(),
         save_to: Optional[str] = None,
         rerun: bool = True,
+        save_json: bool = False,
     ) -> None:
         self.logger.debug("Render diagram")
         if rerun:
             rosia.rerun_manager.init(rerun_config)
-        diagram(self.node_infos, save_to=save_to, rerun=rerun)
+        diagram(self.node_infos, save_to=save_to, rerun=rerun, save_json=save_json)
 
     def execute(
         self,
