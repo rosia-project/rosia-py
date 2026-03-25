@@ -79,7 +79,7 @@ class Graph:
 def diagram(
     node_infos: "Dict[str, NodeRuntimeInfo]",
     save_to: Optional[str] = None,
-    rerun: bool = True,
+    rerun: bool = False,
     save_json: bool = False,
 ) -> None:
     """Main entry point: build graph, layout with ELK, and render."""

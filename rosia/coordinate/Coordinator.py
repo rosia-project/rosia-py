@@ -54,7 +54,7 @@ class Coordinator:
         self,
         rerun_config: RerunConfig = RerunConfig(),
         save_to: Optional[str] = None,
-        rerun: bool = True,
+        rerun: bool = False,
         save_json: bool = False,
     ) -> None:
         self.logger.debug("Render diagram")
