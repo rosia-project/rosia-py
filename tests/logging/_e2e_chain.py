@@ -30,10 +30,10 @@ class Sink:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    timer = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-    src = coor.create_node(Source())
-    sink = coor.create_node(Sink())
+    app = Application()
+    timer = app.create_node(Timer(interval=1 * s, offset=0 * s))
+    src = app.create_node(Source())
+    sink = app.create_node(Sink())
     timer.output_timer >>= src.input_port
     src.output >>= sink.input_port
-    coor.execute(timeout=10)
+    app.execute(timeout=10)

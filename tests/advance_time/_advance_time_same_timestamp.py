@@ -80,10 +80,10 @@ class Receiver:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    source_a = coor.create_node(SourceA())
-    source_b = coor.create_node(SourceB())
-    receiver = coor.create_node(Receiver())
+    app = Application()
+    source_a = app.create_node(SourceA())
+    source_b = app.create_node(SourceB())
+    receiver = app.create_node(Receiver())
     source_a.out >>= receiver.port_a
     source_b.out >>= receiver.port_b
-    coor.execute(timeout=15)
+    app.execute(timeout=15)

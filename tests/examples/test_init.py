@@ -34,8 +34,8 @@ class Printer:
 
 @pytest.mark.timeout(30)
 def test_init():
-    coor = Application()
-    str_gen = coor.create_node(StringGenerator(multiplier=2))
-    printer = coor.create_node(Printer())
+    app = Application()
+    str_gen = app.create_node(StringGenerator(multiplier=2))
+    printer = app.create_node(Printer())
     str_gen.output_str >>= printer.input_str
-    coor.execute()
+    app.execute()

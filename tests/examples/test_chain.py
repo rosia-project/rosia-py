@@ -44,10 +44,10 @@ class Printer:
 
 @pytest.mark.timeout(30)
 def test_chain():
-    coor = Application()
-    int_gen = coor.create_node(IntGenerator())
-    doubler = coor.create_node(Doubler())
-    printer = coor.create_node(Printer())
+    app = Application()
+    int_gen = app.create_node(IntGenerator())
+    doubler = app.create_node(Doubler())
+    printer = app.create_node(Printer())
     int_gen.output >>= doubler.input_port
     doubler.output_port >>= printer.input_int
-    coor.execute()
+    app.execute()

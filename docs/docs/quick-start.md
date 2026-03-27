@@ -60,15 +60,15 @@ class Printer:
         log.info(f"Got: {self.value}")
 
 
-coor = Application()
-timer = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-counter = coor.create_node(Counter())
-printer = coor.create_node(Printer())
+app = Application()
+timer = app.create_node(Timer(interval=1 * s, offset=0 * s))
+counter = app.create_node(Counter())
+printer = app.create_node(Printer())
 
 timer.output_timer >>= counter.tick
 counter.output >>= printer.value
 
-coor.execute()
+app.execute()
 ```
 
 Save this as `app.py` and run it:

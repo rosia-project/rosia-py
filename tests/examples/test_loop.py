@@ -34,9 +34,9 @@ class Manager:
 
 @pytest.mark.timeout(30)
 def test_loop():
-    coor = Application()
-    worker = coor.create_node(Worker())
-    manager = coor.create_node(Manager())
+    app = Application()
+    worker = app.create_node(Worker())
+    manager = app.create_node(Manager())
     worker.output_int >>= manager.input_int
     manager.output_int >>= worker.input_int
-    coor.execute()
+    app.execute()

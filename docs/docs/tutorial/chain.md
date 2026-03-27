@@ -61,17 +61,17 @@ class Printer:
 ## Wiring
 
 ```python
-coor = Application()
-timer = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-gen = coor.create_node(IntGenerator())
-doubler = coor.create_node(Doubler())
-printer = coor.create_node(Printer())
+app = Application()
+timer = app.create_node(Timer(interval=1 * s, offset=0 * s))
+gen = app.create_node(IntGenerator())
+doubler = app.create_node(Doubler())
+printer = app.create_node(Printer())
 
 timer.output_timer >>= gen.tick
 gen.output >>= doubler.input_port
 doubler.output_port >>= printer.input_port
 
-coor.execute()
+app.execute()
 ```
 
 Output:

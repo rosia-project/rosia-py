@@ -36,10 +36,10 @@ class Printer:
 
 @pytest.mark.timeout(30)
 def test_timer_chain():
-    coor = Application()
-    timer_node = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-    int_generator = coor.create_node(IntGenerator())
-    printer = coor.create_node(Printer())
+    app = Application()
+    timer_node = app.create_node(Timer(interval=1 * s, offset=0 * s))
+    int_generator = app.create_node(IntGenerator())
+    printer = app.create_node(Printer())
     timer_node.output_timer >>= int_generator.input_port
     int_generator.output_port >>= printer.input_timer
-    coor.execute(timeout=10)
+    app.execute(timeout=10)

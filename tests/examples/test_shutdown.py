@@ -34,8 +34,8 @@ class Printer:
 
 @pytest.mark.timeout(30)
 def test_shutdown():
-    coor = Application()
-    int_gen = coor.create_node(IntGenerator())
-    printer = coor.create_node(Printer())
+    app = Application()
+    int_gen = app.create_node(IntGenerator())
+    printer = app.create_node(Printer())
     int_gen.output_int >>= printer.input_int
-    coor.execute()
+    app.execute()

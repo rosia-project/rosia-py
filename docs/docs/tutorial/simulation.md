@@ -93,18 +93,18 @@ from rosia import Application
 from rosia.time import ms
 from rosia.time.Timer import Timer
 
-coor = Application()
-timer = coor.create_node(Timer(interval=20 * ms, offset=0 * s))
-sim1 = coor.create_node(BallSimulator(max_ticks=100))
-sim2 = coor.create_node(BallSimulator(max_ticks=100, slow=True))
-renderer = coor.create_node(SyncRenderer())
+app = Application()
+timer = app.create_node(Timer(interval=20 * ms, offset=0 * s))
+sim1 = app.create_node(BallSimulator(max_ticks=100))
+sim2 = app.create_node(BallSimulator(max_ticks=100, slow=True))
+renderer = app.create_node(SyncRenderer())
 
 timer.output_timer >>= sim1.tick
 timer.output_timer >>= sim2.tick
 sim1.output >>= renderer.ball1
 sim2.output >>= renderer.ball2
 
-coor.execute()
+app.execute()
 ```
 
 ## What happens

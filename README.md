@@ -1,11 +1,45 @@
-# rosia: robotic middleware for python
+# Rosia: Reproducible Robotic Middleware
 
 ## Install
 ```bash
 pip install rosia
 ```
 
-## Quick Start
+Alternatively, you can install from source:
+
+```bash
+git clone https://github.com/rosia-project/rosia.git
+cd rosia
+pip install -e .
+```
+
+## Hello World
+
+
+```python
+from rosia import InputPort, OutputPort, reaction, Node, Application
+from rosia import log
+
+@Node
+class Greeter:
+    output = OutputPort[str]()
+    def start(self):
+        self.output("Hello, World!")
+
+@Node
+class Printer:
+    message = InputPort[str]()
+    @reaction([message])
+    def print_message(self):
+        log.info(self.message)
+
+if __name__ == "__main__":
+    app = Application()
+    greeter = app.create_node(Greeter())
+    printer = app.create_node(Printer())
+    greeter.output >>= printer.message
+    app.execute()
+```
 
 ### First program
 Let's write a first program that generates and prints numbers using timers. 
@@ -44,14 +78,14 @@ With the `@reaction` decorator, every time the input port `self.input_int` recei
 To connect the two nodes, use a coordinator and create nodes within the coordinator. Connect ports using the `>>=` operator. Each node is a separate process for true concurrency. 
 
 ```python
-coor = Application()
-int_gen = coor.create_node(IntGenerator())
-printer = coor.create_node(Printer())
+app = Application()
+int_gen = app.create_node(IntGenerator())
+printer = app.create_node(Printer())
 int_gen.output_int >>= printer.input_int
-coor.execute()
+app.execute()
 ```
 
-Nodes initialize and run after `coor.execute()` is called. Run this example with `python tests/examples/easy.py`.
+Nodes initialize and run after `app.execute()` is called. Run this example with `python tests/examples/easy.py`.
 
 ### Time and synchronization
 Let's modify the int generator to be triggered by a timer. 
@@ -86,18 +120,18 @@ class Printer:
 We can create two instances of `IntGenerator` in a coordinator:
 
 ```python
-coor = Application(logging.INFO)
-timer1 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
-timer2 = coor.create_node(Timer(interval=1 * ms, offset=0 * s))
-int_gen1 = coor.create_node(IntGenerator())
-int_gen2 = coor.create_node(IntGenerator())
-printer = coor.create_node(Printer())
+app = Application(logging.INFO)
+timer1 = app.create_node(Timer(interval=1 * ms, offset=0 * s))
+timer2 = app.create_node(Timer(interval=1 * ms, offset=0 * s))
+int_gen1 = app.create_node(IntGenerator())
+int_gen2 = app.create_node(IntGenerator())
+printer = app.create_node(Printer())
 timer1.output_timer >>= int_gen1.timer
 timer2.output_timer >>= int_gen2.timer
 int_gen1.output >>= printer.input_int1
 int_gen2.output >>= printer.input_int2
 
-coor.execute()
+app.execute()
 ```
 
 When we execute this example with `python tests/examples/parallel_timed.py`, notice how the two inputs are always synchronized since the timers are aligned. Rosia handles synchronization internally so you don't have to worry about it!

@@ -90,16 +90,16 @@ def benchmark_rosia(
 
     results_path = os.environ.get("RESULTS_DIR", "/results") + "/rosia_results.json"
 
-    coor = Application()
-    sender = coor.create_node(
+    app = Application()
+    sender = app.create_node(
         Sender(array_sizes, multiplier_value, num_iterations, results_path)
     )
-    multiplier = coor.create_node(Multiplier())
+    multiplier = app.create_node(Multiplier())
 
     sender.data_out >>= multiplier.input_data
     multiplier.output_result >>= sender.result_in
 
-    coor.execute()
+    app.execute()
 
     # Read results back from file (nodes run in separate processes)
     if os.path.exists(results_path):

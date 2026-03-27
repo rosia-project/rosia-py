@@ -40,14 +40,14 @@ class Printer:
 @pytest.mark.xfail(raises=SystemExit, strict=True)
 @pytest.mark.timeout(30)
 def test_parallel():
-    coor = Application()
-    int_gen1 = coor.create_node(IntGenerator())
-    int_gen2 = coor.create_node(IntGenerator())
-    printer = coor.create_node(Printer())
+    app = Application()
+    int_gen1 = app.create_node(IntGenerator())
+    int_gen2 = app.create_node(IntGenerator())
+    printer = app.create_node(Printer())
     int_gen1.output >>= printer.input_int1
     int_gen2.output >>= printer.input_int2
 
-    coor.execute()
+    app.execute()
 
 
 if __name__ == "__main__":

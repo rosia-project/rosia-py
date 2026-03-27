@@ -108,20 +108,20 @@ class Printer:
 
 
 if __name__ == "__main__":
-    coor = Application()
+    app = Application()
 
-    timer = coor.create_node(Timer(interval=100 * ms, offset=0 * s))  # 0.1s ticks
-    sine = coor.create_node(SineGenerator(frequency=0.5, amplitude=1.0))
-    noise = coor.create_node(NoisyChannel(noise_std=0.3))
-    lpf = coor.create_node(LowPassFilter(alpha=0.2))
-    printer = coor.create_node(Printer(max_samples=100))
+    timer = app.create_node(Timer(interval=100 * ms, offset=0 * s))  # 0.1s ticks
+    sine = app.create_node(SineGenerator(frequency=0.5, amplitude=1.0))
+    noise = app.create_node(NoisyChannel(noise_std=0.3))
+    lpf = app.create_node(LowPassFilter(alpha=0.2))
+    printer = app.create_node(Printer(max_samples=100))
 
     timer.output_timer >>= sine.tick
     sine.output >>= noise.input_signal
     noise.output_signal >>= lpf.input_signal
     lpf.output_signal >>= printer.input_signal
 
-    coor.diagram()
+    app.diagram()
     rr.send_blueprint(
         rrb.Blueprint(
             rrb.Horizontal(
@@ -129,4 +129,4 @@ if __name__ == "__main__":
             )
         )
     )
-    coor.execute(trace=True, log_level="INFO")
+    app.execute(trace=True, log_level="INFO")

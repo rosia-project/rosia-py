@@ -60,19 +60,19 @@ class Printer:
 Both timers use the same interval and offset, so they fire at the same logical times.
 
 ```python
-coor = Application()
-timer1 = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-timer2 = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-gen1 = coor.create_node(IntGenerator())
-gen2 = coor.create_node(IntGenerator())
-printer = coor.create_node(Printer())
+app = Application()
+timer1 = app.create_node(Timer(interval=1 * s, offset=0 * s))
+timer2 = app.create_node(Timer(interval=1 * s, offset=0 * s))
+gen1 = app.create_node(IntGenerator())
+gen2 = app.create_node(IntGenerator())
+printer = app.create_node(Printer())
 
 timer1.output_timer >>= gen1.timer
 timer2.output_timer >>= gen2.timer
 gen1.output >>= printer.input_int1
 gen2.output >>= printer.input_int2
 
-coor.execute()
+app.execute()
 ```
 
 Output:

@@ -52,12 +52,12 @@ class Consumer:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    fast_timer = coor.create_node(Timer(interval=10 * ms, offset=0 * s))
-    slow_timer = coor.create_node(Timer(interval=30 * ms, offset=0 * s))
-    producer = coor.create_node(Producer())
-    consumer = coor.create_node(Consumer())
+    app = Application()
+    fast_timer = app.create_node(Timer(interval=10 * ms, offset=0 * s))
+    slow_timer = app.create_node(Timer(interval=30 * ms, offset=0 * s))
+    producer = app.create_node(Producer())
+    consumer = app.create_node(Consumer())
     fast_timer.output_timer >>= producer.tick
     producer.output >>= consumer.data
     slow_timer.output_timer >>= consumer.tick
-    coor.execute(timeout=10)
+    app.execute(timeout=10)

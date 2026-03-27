@@ -46,13 +46,13 @@ class Printer:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    timer = coor.create_node(Timer(interval=1 * s, offset=0 * s))
-    int_gen = coor.create_node(IntGenerator())
-    doubler = coor.create_node(Doubler())
-    printer = coor.create_node(Printer())
+    app = Application()
+    timer = app.create_node(Timer(interval=1 * s, offset=0 * s))
+    int_gen = app.create_node(IntGenerator())
+    doubler = app.create_node(Doubler())
+    printer = app.create_node(Printer())
     timer.output_timer >>= int_gen.input_port
     int_gen.output >>= doubler.input_port
     doubler.output_port >>= printer.input_int
-    coor.diagram()
-    coor.execute(trace=True)
+    app.diagram()
+    app.execute(trace=True)

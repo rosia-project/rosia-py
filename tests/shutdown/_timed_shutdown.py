@@ -53,14 +53,14 @@ class Sink:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    timer = coor.create_node(Timer(interval=10 * ms, offset=0 * s))
-    producer1 = coor.create_node(Producer(name="P1", max_ticks=10))
-    producer2 = coor.create_node(Producer(name="P2", max_ticks=10, slow=True))
-    sink1 = coor.create_node(Sink(name="S1"))
-    sink2 = coor.create_node(Sink(name="S2"))
+    app = Application()
+    timer = app.create_node(Timer(interval=10 * ms, offset=0 * s))
+    producer1 = app.create_node(Producer(name="P1", max_ticks=10))
+    producer2 = app.create_node(Producer(name="P2", max_ticks=10, slow=True))
+    sink1 = app.create_node(Sink(name="S1"))
+    sink2 = app.create_node(Sink(name="S2"))
     timer.output_timer >>= producer1.tick
     timer.output_timer >>= producer2.tick
     producer1.output >>= sink1.input_port
     producer2.output >>= sink2.input_port
-    coor.execute(timeout=10)
+    app.execute(timeout=10)

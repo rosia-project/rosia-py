@@ -44,11 +44,11 @@ class Printer:
 Create a `Application`, instantiate nodes, connect ports with `>>=`, and call `execute()`. Connections are automatically type checked.
 
 ```python
-coor = Application()
-greeter = coor.create_node(Greeter())
-printer = coor.create_node(Printer())
+app = Application()
+greeter = app.create_node(Greeter())
+printer = app.create_node(Printer())
 greeter.output >>= printer.message
-coor.execute()
+app.execute()
 ```
 
 Run with `python hello.py`. This produces:

@@ -8,10 +8,10 @@ Rosia integrates with [Rerun](https://rerun.io/) for visualizing node data over 
 
 ## Enabling Tracing
 
-Pass `trace=True` to `coor.execute()` to enable Rerun logging. This opens the Rerun viewer automatically.
+Pass `trace=True` to `app.execute()` to enable Rerun logging. This opens the Rerun viewer automatically.
 
 ```python
-coor.execute(trace=True)
+app.execute(trace=True)
 ```
 
 When tracing is enabled:
@@ -22,11 +22,11 @@ When tracing is enabled:
 
 ## Node Diagram
 
-Call `coor.diagram()` before `execute()` to render the node graph in Rerun. This shows the topology of your application — nodes, ports, and connections.
+Call `app.diagram()` before `execute()` to render the node graph in Rerun. This shows the topology of your application — nodes, ports, and connections.
 
 ```python
-coor.diagram()
-coor.execute(trace=True)
+app.diagram()
+app.execute(trace=True)
 ```
 
 ## Automatic Port Logging
@@ -97,7 +97,7 @@ Use Rerun's blueprint API to configure the viewer layout:
 import rerun as rr
 import rerun.blueprint as rrb
 
-coor.diagram()
+app.diagram()
 rr.send_blueprint(
     rrb.Blueprint(
         rrb.Horizontal(
@@ -105,7 +105,7 @@ rr.send_blueprint(
         )
     )
 )
-coor.execute(trace=True)
+app.execute(trace=True)
 ```
 
 ## Full Example
@@ -172,16 +172,16 @@ class Renderer:
         log.info(f"ball {self.ball.position}")
 
 
-coor = Application()
-timer = coor.create_node(Timer(interval=20 * ms, offset=0 * s))
-sim = coor.create_node(BallSimulator())
-renderer = coor.create_node(Renderer())
+app = Application()
+timer = app.create_node(Timer(interval=20 * ms, offset=0 * s))
+sim = app.create_node(BallSimulator())
+renderer = app.create_node(Renderer())
 timer.output_timer >>= sim.tick
 sim.output >>= renderer.ball
 
-coor.diagram()
+app.diagram()
 rr.send_blueprint(rrb.Blueprint(rrb.Spatial3DView(origin="/")))
-coor.execute(trace=True)
+app.execute(trace=True)
 ```
 
 Run this and the Rerun viewer opens with:

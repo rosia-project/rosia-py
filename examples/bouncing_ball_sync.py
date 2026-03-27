@@ -121,25 +121,25 @@ class SyncRenderer:
 
 
 if __name__ == "__main__":
-    coor = Application()
+    app = Application()
 
-    timer = coor.create_node(Timer(interval=20 * ms, offset=0 * s))
+    timer = app.create_node(Timer(interval=20 * ms, offset=0 * s))
 
-    sim1 = coor.create_node(
+    sim1 = app.create_node(
         BallSimulator(initial_position=(0.0, 0.0, 5.0), color=[255, 100, 50])
     )
-    sim2 = coor.create_node(
+    sim2 = app.create_node(
         BallSimulator(initial_position=(0.0, 3.0, 5.0), color=[50, 150, 255], slow=True)
     )
 
-    renderer = coor.create_node(SyncRenderer())
+    renderer = app.create_node(SyncRenderer())
 
     timer.output_timer >>= sim1.tick
     timer.output_timer >>= sim2.tick
     sim1.output >>= renderer.ball1
     sim2.output >>= renderer.ball2
 
-    coor.diagram()
+    app.diagram()
     rr.send_blueprint(
         rrb.Blueprint(
             rrb.Horizontal(
@@ -147,4 +147,4 @@ if __name__ == "__main__":
             )
         )
     )
-    coor.execute(trace=True, log_level="DEBUG")
+    app.execute(trace=True, log_level="DEBUG")

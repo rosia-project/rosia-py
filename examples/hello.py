@@ -20,8 +20,8 @@ class Printer:
 
 
 if __name__ == "__main__":
-    coor = Application()
-    greeter = coor.create_node(Greeter())
-    printer = coor.create_node(Printer())
+    app = Application()
+    greeter = app.create_node(Greeter())
+    printer = app.create_node(Printer())
     greeter.output >>= printer.message
-    coor.execute()
+    app.execute()
