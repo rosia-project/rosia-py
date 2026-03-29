@@ -101,7 +101,6 @@ def benchmark_rosia(
 
     app.execute()
 
-    # Read results back from file (nodes run in separate processes)
     if os.path.exists(results_path):
         with open(results_path, "r") as f:
             raw = json.load(f)

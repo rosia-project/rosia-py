@@ -16,7 +16,7 @@ const config: Config = {
     },
   ],
   title: "Rosia",
-  tagline: "Rosia is a reproducible robotics framework, currently in alpha testing.",
+  tagline: "A reproducible robotic middleware",
   favicon: "img/favicon.ico",
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future

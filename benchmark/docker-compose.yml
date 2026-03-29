@@ -5,3 +5,5 @@ services:
       dockerfile: benchmark/ros2.dockerfile
     volumes:
       - ./results:/results
+    shm_size: 10gb
+    cpuset: "0-9"

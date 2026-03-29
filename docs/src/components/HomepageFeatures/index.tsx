@@ -11,19 +11,19 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: "Performance",
+    title: "Performant",
     image: "/img/features/performant.png",
-    description: <>Rosia is designed from the ground up to be performant and efficient with low latency.</>,
+    description: <>Rosia has more than 2x lower latency compared to ROS2. It also features true concurrency without being blocked by Python's Global Interpreter Lock.</>,
   },
   {
-    title: "Deterministic and Reproducible",
+    title: "Reproducible",
     image: "/img/features/deterministic.png",
-    description: <>Rosia is deterministic and reproducible, ensuring that the same results are obtained regardless of the runtime.</>,
+    description: <>Rosia is reproducible with deterministic execution, allowing you to easily debug and test your robotic applications.</>,
   },
   {
-    title: "Fully Pythonic",
+    title: "Component-based",
     image: "/img/features/python.png",
-    description: <>Rosia is designed to be fully Pythonic, allowing you to use it in your existing Python projects.</>,
+    description: <>Rosia is component-based with ports and connections, allowing you to easily isolate and reuse code.</>,
   },
 ];
 

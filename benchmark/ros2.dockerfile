@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 
 RUN pip install --upgrade pip setuptools && \
-    pip install numpy ray[default] matplotlib rerun-sdk
+    pip install numpy ray[default] matplotlib rerun-sdk pyelk pyzmq cloudpickle rich
 
 COPY . /rosia-src
 RUN pip install /rosia-src

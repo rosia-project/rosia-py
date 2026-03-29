@@ -69,9 +69,9 @@ def main():
     all_results = {}
 
     benchmarks = {
+        "rosia": lambda: benchmark_rosia(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
         "rclpy": lambda: benchmark_rclpy(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
         "ray": lambda: benchmark_ray(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
-        "rosia": lambda: benchmark_rosia(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
     }
 
     for name, run_fn in benchmarks.items():
