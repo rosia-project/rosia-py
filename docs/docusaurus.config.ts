@@ -75,6 +75,11 @@ const config: Config = {
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: "alpha_testing",
+      content: "Rosia is currently in alpha testing. API is susceptible to change.",
+      isCloseable: true,
+    },
     // Replace with your project's social card
     image: "img/docusaurus-social-card.jpg",
     colorMode: {

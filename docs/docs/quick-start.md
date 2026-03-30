@@ -24,7 +24,7 @@ Requires `python>=3.9`.
 
 ## Next Steps
 
-- [Hello World](tutorial/hello) — a more detailed walkthrough
-- [Chaining Nodes](tutorial/chain) — build multi-stage pipelines
-- [Synchronization](tutorial/synchronization) — merge multiple sources
-- [Timed Simulation](tutorial/simulation) — physics simulation with slow/fast nodes
+- [Hello World](tutorial/hello) — build your first Rosia application
+- [Timer](tutorial/timer) — drive periodic events with timers and logical time
+- [Synchronization](tutorial/synchronization) — automatic synchronization across parallel pipelines
+- [Visualization with Rerun](tutorial/rerun) — visualize node data with Rerun
