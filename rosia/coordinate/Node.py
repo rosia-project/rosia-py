@@ -182,9 +182,10 @@ class NodeRuntime:
             min_safe_to_advance_to = min(
                 min_safe_to_advance_to, input_port.safe_to_advance_to
             )
-        self.logger.debug(
-            f"STAT updated: {self.node_name} {self.STAT} -> {min_safe_to_advance_to}"
-        )
+        if self.logger._level <= self.logger.DEBUG:
+            self.logger.debug(
+                f"STAT updated: {self.node_name} {self.STAT} -> {min_safe_to_advance_to}"
+            )
         self.STAT = min_safe_to_advance_to
 
     def drain_message_queue(self) -> None:
@@ -288,21 +289,25 @@ class NodeRuntime:
         self.logical_time = timestamp
 
         try:
-            self.logger.set_logical_time(self.logical_time)
-            self.logger.set_physical_time(get_physical_time() - self.start_logical_time)
-            self.logger.debug(f"{func.__name__}()")
-            for input_port in self.input_port_connectors.values():
-                if func in input_port.trigger_functions:
-                    if hasattr(input_port.value, "to_rerun"):
-                        self.logger.rerun(
-                            input_port.value.to_rerun(),  # type: ignore
-                            rerun_subpath=f"{input_port.name}",
-                        )
-                    else:
-                        self.logger.rerun(
-                            rr.TextLog(text=str(input_port.value), level="DEBUG"),
-                            rerun_subpath=f"{input_port.name}",
-                        )
+            if self.logger._level <= self.logger.DEBUG or self.execution_config.trace:
+                self.logger.set_logical_time(self.logical_time)
+                self.logger.set_physical_time(
+                    get_physical_time() - self.start_logical_time
+                )
+                self.logger.debug(f"{func.__name__}()")
+            if self.execution_config.trace:
+                for input_port in self.input_port_connectors.values():
+                    if func in input_port.trigger_functions:
+                        if hasattr(input_port.value, "to_rerun"):
+                            self.logger.rerun(
+                                input_port.value.to_rerun(),  # type: ignore
+                                rerun_subpath=f"{input_port.name}",
+                            )
+                        else:
+                            self.logger.rerun(
+                                rr.TextLog(text=str(input_port.value), level="DEBUG"),
+                                rerun_subpath=f"{input_port.name}",
+                            )
             func(self.node_instance)
         except Exception as e:
             print(f"Exception in trigger function {func}: {e}")
@@ -350,7 +355,6 @@ class NodeRuntime:
         while not self.shutdown_requested:
             self.drain_message_queue()
             self.update_STAT()
-            self.logger.debug("Event loop processing messages")
 
             if self.event_queue and self.event_queue.peek_time() < self.STAT:
                 self.advance_logical_time(to_time=self.STAT)

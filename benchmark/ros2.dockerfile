@@ -15,6 +15,6 @@ RUN pip install /rosia-src
 
 WORKDIR /benchmark
 
-COPY benchmark/benchmarks/ ./
+COPY benchmark/benchmarks/ ./benchmarks/
 
-CMD ["bash", "-c", "source /opt/ros/humble/setup.bash && python3 run_benchmarks.py"]
+CMD ["bash", "-c", "source /opt/ros/humble/setup.bash && cd benchmarks && python3 run_benchmarks.py"]

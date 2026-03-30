@@ -55,7 +55,7 @@ def run_benchmark_loop_sync(
 # float64 = 8 bytes per element; 2^1=2 (16B) to 2^20=1048576 (8MB)
 ARRAY_SIZES = [2**n for n in range(1, 21)]
 NUM_ITERATIONS = 20
-RESULTS_DIR = "/results"
+RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results")
 
 
 def main():
@@ -89,7 +89,7 @@ def main():
         plot_results(all_results, ARRAY_SIZES, RESULTS_DIR)
 
     # Print summary table
-    print("\n=== Summary (mean latency in ms) ===")
+    print("\n=== Summary (median latency in ms) ===")
     header = f"{'Size':>10}"
     for framework in all_results:
         header += f" | {framework:>12}"
@@ -100,7 +100,7 @@ def main():
         for framework in all_results:
             times = all_results[framework].get(str(size), [])
             if times:
-                row += f" | {np.mean(times) * 1000:>10.3f}ms"
+                row += f" | {np.median(times) * 1000:>10.3f}ms"
             else:
                 row += f" | {'N/A':>12}"
         print(row)
@@ -121,21 +121,29 @@ def plot_results(all_results: dict, array_sizes: list, results_dir: str):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     for framework, data in all_results.items():
-        means = []
-        stds = []
+        medians = []
+        q25s = []
+        q75s = []
         for size in array_sizes:
-            times = data.get(str(size), [])
-            means.append(np.mean(times) * 1000)
-            stds.append(np.std(times) * 1000)
+            times = np.array(data.get(str(size), [])) * 1000
+            median = np.median(times)
+            medians.append(median)
+            q25s.append(median - np.percentile(times, 25))
+            q75s.append(np.percentile(times, 75) - median)
         ax.errorbar(
-            data_sizes, means, yerr=stds, marker="o", capsize=4, label=framework
+            data_sizes,
+            medians,
+            yerr=[q25s, q75s],
+            marker="o",
+            capsize=4,
+            label=framework,
         )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xticks(data_sizes)
     ax.set_xticklabels([format_bytes(s) for s in data_sizes], rotation=45)
     ax.set_xlabel("Data Size (float64 array)")
-    ax.set_ylabel("Latency (ms)")
+    ax.set_ylabel("Median Latency (ms)")
     ax.set_title("rclpy vs Ray vs rosia: Array Multiplication Latency")
     ax.legend()
     ax.grid(True, which="both", ls="--", alpha=0.5)

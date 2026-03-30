@@ -163,15 +163,14 @@ class Application:
 
         self.logger.debug("Waiting for shutdown request...")
         timeout_ms = int(timeout * 1000) if timeout is not None else -1
-        has_message = self.coordinator_receiver_transport.wait_for_message(
+        message = self.coordinator_receiver_transport.receive_blocking(
             timeout=timeout_ms
         )
-        if not has_message:
+        if message is None:
             self.logger.debug("Timeout reached, initiating shutdown...")
             shutdown_timestamp = get_physical_time() - start_physical_time
             status_code = 0
         else:
-            message = self.coordinator_receiver_transport.receive()
             self.logger.debug(f"Received shutdown request: {message}")
             if not isinstance(message, ApplicationShutdownRequestMessage):
                 raise ValueError("Expected ApplicationShutdownRequestMessage")

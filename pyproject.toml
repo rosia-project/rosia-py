@@ -23,6 +23,8 @@ dependencies = [
     "cloudpickle",
     "pyelk",
     "rich",
+    "pydantic",
+    "rerun-sdk",
 ]
 
 [dependency-groups]

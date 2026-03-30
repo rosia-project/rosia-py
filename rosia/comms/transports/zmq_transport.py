@@ -28,24 +28,37 @@ class ZMQTransport(TransportBase):
             self.socket = context.socket(zmq.PULL)
             port = self.socket.bind_to_random_port("tcp://127.0.0.1")
             self.endpoint = f"tcp://127.0.0.1:{port}"
+        self._has_pending: bool = False
 
     def send(self, msg: Any):
         assert self.type == ClientType.SENDER, "Cannot send on a receiver socket."
         self.socket.send(self.serializer.serialize(msg))
 
     def receive(self) -> Any:
-        """Receive all available messages from the transport. Blocks until a message is available."""
+        """Non-blocking receive. Returns None if no message available."""
         assert self.type == ClientType.RECEIVER, "Cannot receive on a sender socket."
-        if self.socket.poll(0, zmq.POLLIN):
+        if self._has_pending or self.socket.poll(0, zmq.POLLIN):
+            self._has_pending = False
             return self.serializer.deserialize(self.socket.recv())
-        else:
-            return None
+        return None
+
+    def receive_blocking(self, timeout: int = -1) -> Any:
+        """Blocking receive. Returns None if timed out."""
+        assert self.type == ClientType.RECEIVER, "Cannot receive on a sender socket."
+        if timeout >= 0:
+            if not self.socket.poll(timeout, zmq.POLLIN):
+                return None
+        return self.serializer.deserialize(self.socket.recv())
 
     def wait_for_message(self, timeout: int = -1) -> bool:
         assert self.type == ClientType.RECEIVER, (
             "Cannot wait for a message on a sender socket."
         )
+        if self._has_pending:
+            return True
         result = self.socket.poll(timeout, zmq.POLLIN)
+        if result:
+            self._has_pending = True
         return result != 0
 
     def close(self):
@@ -67,10 +80,9 @@ if __name__ == "__main__":
         # Give connection time to establish
         time.sleep(0.1)
 
-        # Test send and wait_for_message
+        # Test send and receive_blocking
         sender.send("Hello, ZMQ!")
-        receiver.wait_for_message()  # ZMQ wait_for_message() just waits, doesn't return
-        msg = receiver.receive()  # Need to call receive() to get the message
+        msg = receiver.receive_blocking()
         print(f"Received: {msg}")
 
         # Test send and receive (non-blocking)
@@ -87,8 +99,7 @@ if __name__ == "__main__":
         import os
 
         sender.send(os.urandom(1048576))
-        receiver.wait_for_message()
-        msg = receiver.receive()
+        msg = receiver.receive_blocking()
         print(f"Received large message: {len(msg)} bytes")
 
         receiver.close()

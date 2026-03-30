@@ -58,9 +58,6 @@ class OutputPortRuntimeObj(Generic[T]):
                 raise ValueError(f"Timestamp {timestamp} is greater than DSTAT {DSTAT}")
         else:
             assert DSTAT is None, "If timestamp is not provided, DSTAT must be None"
-        # Drain and process messages (needed for nodes that send from start())
-        self.node_runtime.drain_message_queue()
-        self.node_runtime.update_STAT()
         if self.node_runtime.shutdown_requested:
             sys.exit(0)
         if timestamp is None:

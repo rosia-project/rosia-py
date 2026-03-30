@@ -11,9 +11,8 @@ from rosia import (
     reaction,
     Application,
     request_shutdown,
-    advance_time,
 )
-from rosia.time import ms, s
+from rosia.time import s
 
 
 @Node
@@ -40,42 +39,64 @@ class Sender:
         results_path: str,
         warmup_steps: int = 20,
     ):
-        self.array_sizes = array_sizes
+        self.array_sizes = list(array_sizes)
         self.multiplier_value = multiplier_value
         self.num_iterations = num_iterations
         self.results_path = results_path
         self.warmup_steps = warmup_steps
         self.all_results: Dict[int, List[float]] = {}
-        self.result_received = False
+
+        self.size_idx = 0
+        self.iteration = 0
+        self.warmup = True
+        self.times: List[float] = []
+        self.t0 = 0.0
+        self.current_array = np.empty(0)
+
+    def start(self):
+        self.current_array = np.random.rand(self.array_sizes[0]).astype(np.float64)
+        self.send_request()
 
     @reaction([result_in])
     def on_result(self):
-        self.result_received = True
+        if self.warmup:
+            self.iteration += 1
+            if self.iteration >= self.warmup_steps:
+                self.warmup = False
+                self.iteration = 0
+            self.send_request()
+            return
 
-    def start(self):
-        for size in self.array_sizes:
-            array = np.random.rand(size).astype(np.float64)
+        elapsed = time.perf_counter() - self.t0
+        self.times.append(elapsed)
+        self.iteration += 1
 
-            # Warmup
-            for _ in range(self.warmup_steps):
-                self.result_received = False
-                self.data_out((array, self.multiplier_value))
-                advance_time(1 * ms)
-
-            times: List[float] = []
-            for _ in range(self.num_iterations):
-                self.result_received = False
-                t0 = time.perf_counter()
-                self.data_out((array, self.multiplier_value))
-                advance_time(1 * ms)
-                elapsed = time.perf_counter() - t0
-                times.append(elapsed)
-
-            self.all_results[size] = times
-            avg = np.mean(times) * 1000
-            std = np.std(times) * 1000
+        if self.iteration >= self.num_iterations:
+            size = self.array_sizes[self.size_idx]
+            self.all_results[size] = self.times
+            avg = np.mean(self.times) * 1000
+            std = np.std(self.times) * 1000
             print(f"  Size {size:>10}: {avg:.3f} ms ± {std:.3f} ms")
 
+            self.size_idx += 1
+            if self.size_idx >= len(self.array_sizes):
+                self.save_results()
+                return
+            self.current_array = np.random.rand(self.array_sizes[self.size_idx]).astype(
+                np.float64
+            )
+            self.warmup = True
+            self.iteration = 0
+            self.times = []
+
+        self.send_request()
+
+    def send_request(self):
+        if not self.warmup:
+            self.t0 = time.perf_counter()
+        self.data_out((self.current_array, self.multiplier_value))
+
+    def save_results(self):
         os.makedirs(os.path.dirname(self.results_path), exist_ok=True)
         with open(self.results_path, "w") as f:
             json.dump({str(k): v for k, v in self.all_results.items()}, f, indent=2)
@@ -88,7 +109,12 @@ def benchmark_rosia(
 ) -> Dict[int, List[float]]:
     print("\n=== Benchmarking rosia ===")
 
-    results_path = os.environ.get("RESULTS_DIR", "/results") + "/rosia_results.json"
+    default_results_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "results"
+    )
+    results_path = (
+        os.environ.get("RESULTS_DIR", default_results_dir) + "/rosia_results.json"
+    )
 
     app = Application()
     sender = app.create_node(
