@@ -10,6 +10,7 @@ from rosia.execute import ExecutorController
 from dataclasses import dataclass
 from rosia.frontend.Annotators import get_rosia_annotations, check_rosia_annotations
 from rosia.coordinate.messages.base import ApplicationShutdownRequestMessage
+import asyncio
 import logging
 import sys
 from rosia.time.utils import get_physical_time
@@ -33,7 +34,6 @@ class Application:
         self.node_endpoints: Dict[str, str] = {}
         self.coordinator_receiver_transport = Transport(ClientType.RECEIVER, Serializer)
         self.logger = Logger(self.__class__.__name__)
-        self.logger.debug("Application created")
 
     def create_node(self, node_cls: T) -> T:
         rosia_annotations = get_rosia_annotations(node_cls)
@@ -56,7 +56,6 @@ class Application:
         save_to: Optional[str] = None,
         save_json: bool = False,
     ) -> None:
-        self.logger.debug("Render diagram")
         if rerun_config is not None:
             rosia.rerun_manager.init(rerun_config)
         diagram(
@@ -67,6 +66,22 @@ class Application:
         )
 
     def execute(
+        self,
+        trace: bool = False,
+        log_level: str = "INFO",
+        rerun_config: Optional[RerunConfig] = None,
+        timeout: Optional[float] = None,
+    ) -> None:
+        asyncio.run(
+            self._execute(
+                trace=trace,
+                log_level=log_level,
+                rerun_config=rerun_config,
+                timeout=timeout,
+            )
+        )
+
+    async def _execute(
         self,
         trace: bool = False,
         log_level: str = "INFO",
@@ -86,35 +101,46 @@ class Application:
             self.logger.set_rerun_config(rerun_config)
         self.logger.debug(f"Start execution with config: {execution_config}")
         self.logger.debug("Setting up remote nodes and initializing input endpoints...")
-        # Setup remote nodes and initialize input endpoints
+        executor_controllers: Dict[str, ExecutorController] = {}
         for name, node_info in self.node_infos.items():
-            executor = ExecutorController(node_info.node)
-            node_info.executor = executor
-            node_endpoints = node_info.executor.call(
-                "init_remote", execution_config, rerun_config
+            executor_controller = ExecutorController(node_info.node)
+            node_info.executor = executor_controller
+            executor_controllers[name] = executor_controller
+        init_results = await asyncio.gather(
+            *(
+                executor_controller.call("init_remote", execution_config, rerun_config)
+                for executor_controller in executor_controllers.values()
             )
+        )
+        for node_endpoints in init_results:
             self.node_endpoints.update(node_endpoints)
 
         self.logger.debug("Updating Node copy of input endpoints...")
-        # Update Node copy of input endpoints
-        for name, node_info in self.node_infos.items():
-            assert node_info.executor is not None
-            node_info.executor.call("init_output_transports", self.node_endpoints)
+        await asyncio.gather(
+            *(
+                executor_controller.call("init_output_transports", self.node_endpoints)
+                for executor_controller in executor_controllers.values()
+            )
+        )
 
         self.logger.debug("Initializing node instances...")
-        # Initialize node instances
-        for name, node_info in self.node_infos.items():
-            assert node_info.executor is not None
-            node_info.executor.call("init_node_instance")
+        await asyncio.gather(
+            *(
+                executor_controller.call("init_node_instance")
+                for executor_controller in executor_controllers.values()
+            )
+        )
 
         self.logger.debug("Collecting output port safe to advance to values...")
-        # Collect output port safe to advance to values
         output_port_safe_to_advance_to = {}
-        for name, node_info in self.node_infos.items():
-            assert node_info.executor is not None
-            output_port_safe_to_advance_to.update(
-                node_info.executor.call("get_output_port_DSTAT")
+        dstat_results = await asyncio.gather(
+            *(
+                executor_controller.call("get_output_port_DSTAT")
+                for executor_controller in executor_controllers.values()
             )
+        )
+        for dstat in dstat_results:
+            output_port_safe_to_advance_to.update(dstat)
 
         self.logger.debug("Propagating output port DSTATs...")
 
@@ -151,21 +177,26 @@ class Application:
                 propagate_output_DSTAT(output_port, propagated=[])
 
         self.logger.debug("Updating ports DSTATs...")
-        # Update ports DSTATs
-        for name, node_info in self.node_infos.items():
-            assert node_info.executor is not None
-            node_info.executor.call(
-                "set_output_port_DSTAT",
-                output_port_safe_to_advance_to,
+        await asyncio.gather(
+            *(
+                executor_controller.call(
+                    "set_output_port_DSTAT",
+                    output_port_safe_to_advance_to,
+                )
+                for executor_controller in executor_controllers.values()
             )
+        )
 
         self.logger.debug("Executing nodes...")
         start_physical_time = get_physical_time()
-        for name, node_info in self.node_infos.items():
-            assert node_info.executor is not None
-            node_info.executor.call_no_ret(
-                "execute", start_logical_time=start_physical_time
+        await asyncio.gather(
+            *(
+                executor_controller.call_no_ret(
+                    "execute", start_logical_time=start_physical_time
+                )
+                for executor_controller in executor_controllers.values()
             )
+        )
 
         self.logger.debug("Waiting for shutdown request...")
         timeout_ms = int(timeout * 1000) if timeout is not None else -1

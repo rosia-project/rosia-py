@@ -1,11 +1,12 @@
 from rosia.comms.Types import ClientType
-from rosia.comms.transports import Transport
+from rosia.comms.request import Client, Server
 from rosia.comms.serializers import CloudpickleSerializer as Serializer
 from typing import Any, Optional
 import multiprocessing
+import asyncio
+import threading
 
 from rosia.execute.Messages import (
-    ExecutorMessage,
     ExecutorStartupMessage,
     ExecutorExecuteRequestMessage,
     ExecutorExecuteResponseMessage,
@@ -13,55 +14,63 @@ from rosia.execute.Messages import (
 
 
 class Executor:
-    def __init__(self, cls: Any, response_endpoint: str):
+    def __init__(self, cls: Any, controller_endpoint: str):
         self.cls = cls
-        self.receive_request_transport = Transport(ClientType.RECEIVER, Serializer)
-        self.send_response_transport = Transport(
-            ClientType.SENDER, Serializer, endpoint=response_endpoint
+        self.server = Server(ClientType.RECEIVER, Serializer)
+        startup_client = Client(
+            ClientType.SENDER, Serializer, endpoint=controller_endpoint
         )
-
-    def send_response(self, message: ExecutorMessage):
-        self.send_response_transport.send(message)
-
-    def wait_for_request(self):
-        self.receive_request_transport.wait_for_message()
-
-    def call(self, func_name: str, *args, **kwargs):
-        try:
-            method = getattr(self.cls, func_name)
-            result = method(*args, **kwargs)
-            self.send_response(ExecutorExecuteResponseMessage(result=result))
-        except Exception as e:
-            self.send_response(ExecutorExecuteResponseMessage(error_message=str(e)))
-
-
-def ExecutorProcess(cls: Any, response_endpoint: str):
-    cls = Serializer().deserialize(cls)
-    executor = Executor(cls, response_endpoint)
-    executor.send_response(
-        ExecutorStartupMessage(
-            executor_receive_endpoint=executor.receive_request_transport.endpoint
+        asyncio.run(
+            startup_client.request(
+                ExecutorStartupMessage(executor_receive_endpoint=self.server.endpoint)
+            )
         )
-    )
-    while True:
-        executor.wait_for_request()
-        request_message = executor.receive_request_transport.receive()
+        startup_client.close()
+
+    def handle_request(self, request_message: Any) -> ExecutorExecuteResponseMessage:
         if (
             not isinstance(request_message, ExecutorExecuteRequestMessage)
             or request_message.error_message is not None
             or request_message.func_name == ""
         ):
-            executor.send_response(
-                ExecutorExecuteResponseMessage(
-                    error_message="Failed to process request: " + str(request_message)
-                )
+            return ExecutorExecuteResponseMessage(
+                error_message="Failed to process request: " + str(request_message)
             )
-        else:
-            executor.call(
-                request_message.func_name,
-                *request_message.args,
-                **request_message.kwargs,
+        if request_message.no_ret:
+            self._no_ret_thread = threading.Thread(
+                target=self.call,
+                args=(request_message.func_name, *request_message.args),
+                kwargs=request_message.kwargs,
             )
+            self._no_ret_thread.start()
+            self.server._running = False
+            return ExecutorExecuteResponseMessage()
+        return self.call(
+            request_message.func_name,
+            *request_message.args,
+            **request_message.kwargs,
+        )
+
+    def call(self, func_name: str, *args, **kwargs) -> ExecutorExecuteResponseMessage:
+        try:
+            method = getattr(self.cls, func_name)
+            result = method(*args, **kwargs)
+            return ExecutorExecuteResponseMessage(result=result)
+        except Exception as e:
+            return ExecutorExecuteResponseMessage(error_message=str(e))
+
+    def run(self):
+        self._no_ret_thread: threading.Thread | None = None
+        self.server.register_callback(self.handle_request)
+        self.server.close()
+        if self._no_ret_thread is not None:
+            self._no_ret_thread.join()
+
+
+def ExecutorProcess(cls: Any, controller_endpoint: str):
+    cls = Serializer().deserialize(cls)
+    executor = Executor(cls, controller_endpoint)
+    executor.run()
 
 
 class ExecutorController:
@@ -70,35 +79,42 @@ class ExecutorController:
     """
 
     def __init__(self, cls: Any):
-        self.response_transport = Transport(ClientType.RECEIVER, Serializer)
+        startup_server = Server(ClientType.RECEIVER, Serializer)
         serializer = Serializer()
         serialized_cls = serializer.serialize(cls)
         self.remote_process = multiprocessing.Process(
             target=ExecutorProcess,
-            args=(serialized_cls, self.response_transport.endpoint),
+            args=(serialized_cls, startup_server.endpoint),
         )
         self.remote_process.start()
-        self.response_transport.wait_for_message()
-        response_message = self.response_transport.receive()
+        startup_message = None
+
+        def handle_startup(msg: Any) -> Any:
+            nonlocal startup_message
+            startup_message = msg
+            startup_server._running = False
+            return msg
+
+        startup_server.register_callback(handle_startup)
+        startup_server.close()
         if (
-            not isinstance(response_message, ExecutorStartupMessage)
-            or response_message.error_message is not None
-            or response_message.executor_receive_endpoint == ""
+            not isinstance(startup_message, ExecutorStartupMessage)
+            or startup_message.error_message is not None
+            or startup_message.executor_receive_endpoint == ""
         ):
             raise RuntimeError(
-                "Failed to start executor process: " + str(response_message)
+                "Failed to start executor process: " + str(startup_message)
             )
-        executor_receive_endpoint = response_message.executor_receive_endpoint
-        self.request_transport = Transport(
-            ClientType.SENDER, Serializer, endpoint=executor_receive_endpoint
+        self.client = Client(
+            ClientType.SENDER,
+            Serializer,
+            endpoint=startup_message.executor_receive_endpoint,
         )
 
-    def call(self, func_name: str, *args, **kwargs):
-        self.request_transport.send(
+    async def call(self, func_name: str, *args, **kwargs):
+        response_message = await self.client.request(
             ExecutorExecuteRequestMessage(func_name=func_name, args=args, kwargs=kwargs)
         )
-        self.response_transport.wait_for_message()
-        response_message = self.response_transport.receive()
         if (
             not isinstance(response_message, ExecutorExecuteResponseMessage)
             or response_message.error_message is not None
@@ -106,10 +122,13 @@ class ExecutorController:
             raise RuntimeError("Failed to execute function: " + str(response_message))
         return response_message.result
 
-    def call_no_ret(self, func_name: str, *args, **kwargs):
-        self.request_transport.send(
-            ExecutorExecuteRequestMessage(func_name=func_name, args=args, kwargs=kwargs)
+    async def call_no_ret(self, func_name: str, *args, **kwargs):
+        await self.client.request(
+            ExecutorExecuteRequestMessage(
+                func_name=func_name, args=args, kwargs=kwargs, no_ret=True
+            )
         )
+        self.client.close()
 
     def join(self, timeout: Optional[float] = None) -> None:
         """Wait for the child process to exit."""

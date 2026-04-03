@@ -17,6 +17,7 @@ class ExecutorExecuteRequestMessage(ExecutorMessage):
     func_name: str = ""
     args: Tuple[Any, ...] = field(default_factory=tuple)
     kwargs: Dict[str, Any] = field(default_factory=dict)
+    no_ret: bool = False
 
 
 @dataclass
