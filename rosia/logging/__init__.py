@@ -85,6 +85,10 @@ class Logger:
                 self.physical_time,
             )
 
+    def shutdown(self) -> None:
+        if self._rerun_manager is not None:
+            self._rerun_manager.shutdown()
+
     def set_level(self, level: int) -> None:
         self._level = level
 

@@ -370,6 +370,10 @@ class NodeRuntime:
             min_safe_to_advance_to = min(
                 min_safe_to_advance_to, input_port.safe_to_advance_to
             )
+        if min_safe_to_advance_to < self.STAT and self.STAT != forever:
+            self.logger.warning(
+                f"STAT decrease: {self.STAT} -> {min_safe_to_advance_to}"
+            )
         min_safe_to_advance_to = min(min_safe_to_advance_to, self.shutdown_time_barrier)
         if self.logger._trace and self.STAT != min_safe_to_advance_to:
             self.logger.debug(f"STAT: {self.STAT} -> {min_safe_to_advance_to}")
@@ -394,15 +398,14 @@ class NodeRuntime:
             self.coordinator_transport.send(
                 ExitMessage(timestamp=None, node_name=self.node_name)
             )
-            if hasattr(self.node_instance, "shutdown"):
-                self.node_instance.shutdown()
-            sys.exit(0)
+            self.shutdown(status_code=0)
         except Exception as e:
             print(f"Exception in {self.node_name}: {e}")
             traceback.print_exc()
             self.coordinator_transport.send(
                 NodeForceShutdownRequest(timestamp=self.logical_time, status_code=1)
             )
+            self.close_transports()
             sys.exit(1)
 
     def request_shutdown(self, delay: Time = Time(0), status_code: int = 0) -> None:
@@ -463,7 +466,24 @@ class NodeRuntime:
             return True
         return False
 
-    def shutdown(self) -> None:
+    def close_transports(self) -> None:
+        if hasattr(self, "transport"):
+            self.transport.close()
+        if hasattr(self, "coordinator_transport"):
+            self.coordinator_transport.close()
+        closed: set[int] = set()
+        for output_port in self.output_port_connectors.values():
+            for downstream_port in output_port.downstream_ports:
+                if (
+                    downstream_port.transport is not None
+                    and id(downstream_port.transport) not in closed
+                ):
+                    downstream_port.transport.close()
+                    closed.add(id(downstream_port.transport))
+
+    def shutdown(self, status_code: int = 0) -> None:
         if hasattr(self.node_instance, "shutdown"):
             self.node_instance.shutdown()
-        sys.exit(0)
+        self.close_transports()
+        self.logger.shutdown()
+        sys.exit(status_code)

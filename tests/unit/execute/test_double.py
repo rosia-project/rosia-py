@@ -25,6 +25,7 @@ def test_double_number_remotely():
         assert asyncio.run(controller.call("double", -3)) == -6
         assert asyncio.run(controller.call("double", 100)) == 200
     finally:
+        controller.client.close()
         controller.remote_process.terminate()
         controller.remote_process.join()
 

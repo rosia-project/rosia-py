@@ -41,6 +41,9 @@ dev = [
 testpaths = ["tests"]
 timeout = 30
 addopts = "-n auto"
+filterwarnings = [
+    "error",
+]
 
 [project.urls]
 Homepage = "https://github.com/rosia-project/rosia"

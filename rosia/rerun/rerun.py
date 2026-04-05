@@ -46,3 +46,7 @@ class RerunManager:
         rr.set_time("logical_time", duration=logical_time.to_unix_time())
         rr.set_time("physical_time", duration=physical_time.to_unix_time())
         rr.log(f"/{entity_path}", message)
+
+    def shutdown(self) -> None:
+        rr.cleanup_if_forked_child()
+        rr.disconnect()

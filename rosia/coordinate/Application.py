@@ -270,6 +270,7 @@ class Application:
             for name, node_info in self.node_infos.items():
                 if node_info.executor is not None:
                     node_info.executor.join()
+            self.coordinator_receiver_transport.close()
             if status_code != 0:
                 sys.exit(status_code)
             return
@@ -350,6 +351,11 @@ class Application:
             if node_info.executor is not None:
                 node_info.executor.join()
 
+        # Close all transports
+        for transport in node_sender_transports.values():
+            transport.close()
+        self.coordinator_receiver_transport.close()
+
         if status_code != 0:
             sys.exit(status_code)
 
@@ -357,14 +363,19 @@ class Application:
         self.logger.debug(
             f"Force shutdown: sending ShutdownMessage to alive nodes: {alive_nodes}"
         )
+        sender_transports = []
         for name in alive_nodes:
             sender_transport = Transport(
                 ClientType.SENDER, Serializer, self.node_endpoints[name]
             )
             sender_transport.send(ShutdownMessage(timestamp=never))
+            sender_transports.append(sender_transport)
         for name, node_info in self.node_infos.items():
             if node_info.executor is not None:
                 node_info.executor.join(timeout=2)
                 if node_info.executor.remote_process.is_alive():
                     self.logger.debug(f"Force killing node {name}")
                     node_info.executor.remote_process.kill()
+        for transport in sender_transports:
+            transport.close()
+        self.coordinator_receiver_transport.close()
