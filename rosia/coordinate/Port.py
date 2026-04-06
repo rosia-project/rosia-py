@@ -50,7 +50,9 @@ class OutputPortRuntimeObj(Generic[T]):
         DSTAT: Optional[Time] = None,
     ) -> None:
         timestamp = self.node_runtime.logical_time
-        if DSTAT is None:
+        if DSTAT is not None:
+            DSTAT += self.node_runtime.logical_time
+        elif DSTAT is None:
             DSTAT = min(
                 self.node_runtime.STAT, self.node_runtime.event_queue.peek_data_time()
             )

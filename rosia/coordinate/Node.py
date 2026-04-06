@@ -206,7 +206,7 @@ class NodeRuntime:
                 and self.event_queue.peek_time() < self.STAT
             ) or (
                 self.reaction_queue.peek_time() is not None
-                and self.reaction_queue.peek_time() < self.STAT
+                and self.reaction_queue.peek_time() <= self.STAT
             )
 
             if has_work:
@@ -221,8 +221,8 @@ class NodeRuntime:
             self.drain_message_queue()
             self.update_STAT()
 
-            next_event_timestamp = self.event_queue.peek_time()
             next_reaction_timestamp = self.reaction_queue.peek_time()
+            next_event_timestamp = self.event_queue.peek_time()
 
             advance_to_time: Time = self.logical_time
 
@@ -234,8 +234,6 @@ class NodeRuntime:
                 advance_to_time = next_event_timestamp  # type: ignore
             else:
                 advance_to_time = min(next_event_timestamp, next_reaction_timestamp)
-            if advance_to_time >= self.STAT:
-                return  # Wait until STAT increases
 
             if advance_to_time < self.logical_time:
                 self.logger.error(
@@ -249,6 +247,9 @@ class NodeRuntime:
             self.logical_time = advance_to_time
 
             self.execute_reactions(advance_to_time)
+
+            if advance_to_time >= self.STAT:
+                return  # Wait until STAT increases
 
             while (
                 self.event_queue.peek_time() is not None

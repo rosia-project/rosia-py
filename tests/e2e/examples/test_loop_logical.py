@@ -1,14 +1,4 @@
-"""Feedback loop example.
-
-Pipeline:
-  Worker <-> Manager
-
-Worker sends 0 to Manager. Manager increments it and sends back.
-Worker forwards the value back to Manager. This continues until
-the value reaches 5, at which point Worker requests shutdown.
-
-Demonstrates bidirectional connections forming a feedback loop.
-"""
+import pytest
 
 from rosia import InputPort, OutputPort, reaction, Node, Application
 from rosia import request_shutdown, log
@@ -47,11 +37,15 @@ class Manager:
         self.output_int(self.input_int + 1, DSTAT=1 * s)
 
 
-if __name__ == "__main__":
+@pytest.mark.timeout(30)
+def test_loop_logical():
     app = Application()
     worker = app.create_node(Worker())
     manager = app.create_node(Manager())
     worker.output_int >>= manager.input_int
     manager.output_int >>= worker.input_int
-    app.diagram(save_to="loop_logical.png")
     app.execute(trace=True, log_level="DEBUG")
+
+
+if __name__ == "__main__":
+    test_loop_logical()
