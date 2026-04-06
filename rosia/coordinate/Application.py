@@ -174,7 +174,7 @@ class Application:
                     output_port_safe_to_advance_to[port.name],
                     port.safe_to_advance_to,
                 )
-            for downstream_port in port.downstream_ports:
+            for downstream_port, is_physical in port.downstream_ports:
                 downstream_port.update_safe_to_advance_to()
                 for affected_output_port in downstream_port.affected_output_ports:
                     affected_output_port.set_DSTAT(

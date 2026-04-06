@@ -156,7 +156,7 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
 
         # Build edges from output→downstream connections
         for port_name, connector in runtime.output_port_connectors.items():
-            for downstream in connector.downstream_ports:
+            for downstream, is_physical in connector.downstream_ports:
                 graph.edges.append(
                     Edge(source_port=port_name, target_port=downstream.name)
                 )

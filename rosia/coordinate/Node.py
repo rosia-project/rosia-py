@@ -142,7 +142,7 @@ class NodeRuntime:
     def init_output_transports(self, node_endpoints: Dict[str, str]) -> None:
         downstream_nodes: Dict[str, List[InputPortConnector[Any]]] = {}
         for name, output_port in self.output_port_connectors.items():
-            for downstream_port in output_port.downstream_ports:
+            for downstream_port, is_physical in output_port.downstream_ports:
                 downstream_node_name = downstream_port.owner.node_name
                 if downstream_node_name not in downstream_nodes:
                     downstream_nodes[downstream_node_name] = []
@@ -356,10 +356,17 @@ class NodeRuntime:
                     input_port.update_safe_to_advance_to()
                 self.update_STAT()
 
-                assert message.timestamp is not None, "Message timestamp is None"
-                self.event_queue.push_input_port_event(
-                    message.timestamp, input_port, message.data
-                )
+                if message.timestamp is None:  # physical message
+                    input_port.set_value_from_event(message.data)
+                    for trigger_function in input_port.trigger_functions:
+                        reaction = Reaction(
+                            trigger_function, self.logical_time, self.node_instance
+                        )
+                        self.reaction_queue.enqueue(reaction)
+                else:
+                    self.event_queue.push_input_port_event(
+                        message.timestamp, input_port, message.data
+                    )
             else:
                 raise ValueError(
                     f"Unexpected message type: [{type(message)}] {message}"
@@ -455,7 +462,7 @@ class NodeRuntime:
             and all_done()
         ):
             for output_port in self.output_port_connectors.values():
-                for downstream_port in output_port.downstream_ports:
+                for downstream_port, is_physical in output_port.downstream_ports:
                     if downstream_port.transport is not None:
                         downstream_port.transport.send(
                             NoMoreMessage(
@@ -474,7 +481,7 @@ class NodeRuntime:
             self.coordinator_transport.close()
         closed: set[int] = set()
         for output_port in self.output_port_connectors.values():
-            for downstream_port in output_port.downstream_ports:
+            for downstream_port, is_physical in output_port.downstream_ports:
                 if (
                     downstream_port.transport is not None
                     and id(downstream_port.transport) not in closed

@@ -67,3 +67,6 @@ class OutputPort(Generic[T]):
     # >>= shorthand for connect
     def __irshift__(self, other: T) -> "OutputPort[T]":
         return self.connect(other)
+
+    def __ifloordiv__(self, other: T) -> "OutputPort[T]":
+        return self.connect(other)

@@ -1,4 +1,14 @@
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    TYPE_CHECKING,
+)
 
 from rosia.comms.Types import ClientType
 from rosia.comms.transports import TransportBase
@@ -98,7 +108,7 @@ class InputPortConnector(PortConnector[T]):
 # This is used to connect the output port to the input port
 class OutputPortConnector(PortConnector[T]):
     def __init__(self, owner: "NodeRuntime", name: Optional[str]) -> None:
-        self.downstream_ports: List[InputPortConnector[T]] = []
+        self.downstream_ports: List[Tuple[InputPortConnector[T], bool]] = []
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"
         self.endpoint = None
@@ -116,23 +126,37 @@ class OutputPortConnector(PortConnector[T]):
         timestamp: Optional[Time] = None,
         DSTAT: Optional[Time] = None,
     ) -> None:
-        for downstream_port in self.downstream_ports:
-            downstream_port.set_value(
-                Message(
-                    data=value,
-                    timestamp=timestamp,
-                    DSTAT=DSTAT,
-                    from_port=self.name,
-                    to_port=downstream_port.name,
+        for downstream_port, is_physical in self.downstream_ports:
+            if not is_physical:
+                downstream_port.set_value(
+                    Message(
+                        data=value,
+                        timestamp=timestamp,
+                        DSTAT=DSTAT,
+                        from_port=self.name,
+                        to_port=downstream_port.name,
+                    )
                 )
-            )
+            else:
+                downstream_port.set_value(
+                    Message(
+                        data=value,
+                        timestamp=None,
+                        DSTAT=None,
+                        from_port=self.name,
+                        to_port=downstream_port.name,
+                    )
+                )
 
-    def connect(self, other: InputPortConnector[T]) -> None:
+    def connect(self, other: InputPortConnector[T], physical: bool = False) -> None:
         if not isinstance(other, InputPortConnector):
             raise TypeError("Can only connect OutputPort to InputPort")
-        if other in self.downstream_ports:
+        if (other, True) in self.downstream_ports or (
+            other,
+            False,
+        ) in self.downstream_ports:
             raise ValueError(f"Port {other.name} is already connected to {self.name}")
-        self.downstream_ports.append(other)
+        self.downstream_ports.append((other, physical))
         other.upstream_ports.append(self)
 
     # >> shorthand for connect
@@ -143,6 +167,11 @@ class OutputPortConnector(PortConnector[T]):
     # >>= shorthand for connect
     def __irshift__(self, other: InputPortConnector[T]) -> "OutputPortConnector[T]":
         self.connect(other)
+        return self
+
+    # >>= shorthand for physical connection
+    def __ifloordiv__(self, other: InputPortConnector[T]) -> "OutputPortConnector[T]":
+        self.connect(other, physical=True)
         return self
 
     def __str__(self) -> str:
