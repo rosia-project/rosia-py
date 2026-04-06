@@ -37,6 +37,7 @@ from rosia.config import ExecutionConfig
 from rosia.logging import Logger
 from rosia.config import RerunConfig
 import signal
+from rosia.time.utils import get_physical_time
 
 T = TypeVar("T")
 
@@ -235,6 +236,9 @@ class NodeRuntime:
             else:
                 advance_to_time = min(next_event_timestamp, next_reaction_timestamp)
 
+            if advance_to_time > self.STAT:
+                return  # Wait until STAT increases
+
             if advance_to_time < self.logical_time:
                 self.logger.error(
                     f"Logical time decrease: {self.logical_time} -> {advance_to_time}"
@@ -245,6 +249,8 @@ class NodeRuntime:
                     f"Logical time: {self.logical_time} -> {advance_to_time}"
                 )
             self.logical_time = advance_to_time
+            self.logger.set_logical_time(advance_to_time)
+            self.logger.set_physical_time(get_physical_time())
 
             self.execute_reactions(advance_to_time)
 
