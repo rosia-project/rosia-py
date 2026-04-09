@@ -46,10 +46,10 @@ class Consumer:
             log.warning(f"RETAINED OK data={self.data}")
             self.checks += 1
             if self.checks >= 3:
-                request_shutdown(0 * s)
+                request_shutdown()
         else:
             log.warning("RETAINED FAIL data=None")
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @pytest.mark.timeout(30)

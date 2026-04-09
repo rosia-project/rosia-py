@@ -12,7 +12,6 @@ Demonstrates bidirectional connections forming a feedback loop.
 
 from rosia import InputPort, OutputPort, reaction, Node, Application
 from rosia import request_shutdown, log
-from rosia.time import s
 
 
 @Node
@@ -28,7 +27,7 @@ class Worker:
         log.info(f"Worker received: {self.input_int}")
         self.output_int(self.input_int)
         if self.input_int == 5:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @Node

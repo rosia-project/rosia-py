@@ -33,7 +33,7 @@ class Printer:
         log.info(f"Received: {self.input_int1} {self.input_int2}")
         self.receive_count += 1
         if self.receive_count >= 3:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ class IntGenerator:
         self.count += 1
         self.output(self.count)
         if self.count >= 5:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @Node
@@ -104,5 +104,5 @@ Time units available: `s` (seconds), `ms` (milliseconds), `us` (microseconds), `
 
 - `Timer` is a built-in source node that emits its current logical time at a fixed `interval`.
 - `IntGenerator` reacts to each tick by incrementing a counter and sending it downstream.
-- `request_shutdown(0 * s)` stops the application after 5 ticks.
+- `request_shutdown()` stops the application after 5 ticks.
 - The `>>=` operator connects an output port to an input port.

@@ -2,7 +2,7 @@ import pytest
 
 from rosia import InputPort, OutputPort, reaction, Node, Application
 from rosia import request_shutdown
-from rosia.time import Time, ms, s
+from rosia.time import Time, ms
 from rosia.time.Timer import Timer
 
 
@@ -36,7 +36,7 @@ class Printer:
             )
         self.receive_count += 1
         if self.receive_count >= 3:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @pytest.mark.timeout(30)

@@ -19,7 +19,7 @@ class StringGenerator:
             self.output_str(string)
             self.count += 1
             yield 1 * s
-        request_shutdown(0 * s)
+        request_shutdown()
 
 
 @Node

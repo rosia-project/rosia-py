@@ -11,27 +11,25 @@ This tutorial builds a simple Rosia application: one node sends a message, anoth
 A Rosia node is a Python class decorated with `@Node`. Ports are declared as class attributes.
 
 ```python
-from rosia import InputPort, OutputPort, reaction, Node, Application
-from rosia import log
+from rosia import InputPort, OutputPort, reaction, Node, Application, log
 
 @Node
 class Greeter:
-    output = OutputPort[str]()  # OutputPort[T]() declares a typed output port
+    output = OutputPort[str]()  # declares a typed output port
 
-    # start() is called once when the application begins
+    # start() is called at the beginning of execution in parallel
     def start(self):
-        self.output("Hello, World!")  # Send a value on an output port
+        self.output("Hello, World!")  # Send a value on the output port
 
 @Node
 class Printer:
-    # Do not use `input` as a port name since it's a reserved Python keyword
-    message = InputPort[str]() # InputPort[T]() declares a typed input port
+    message = InputPort[str]() # declares a typed input port.  Do not use `input` as a port name since it's a reserved Python keyword
 
-    @reaction([message])  # Fire when listed port receives a message
+    @reaction([message])  # Function is executed when listed port receives a message
     def print_message(self):
         log.info(self.message)  # self.message reads the current value of the input port
-        # log is Rosia's built-in logger. It prefixes messages with the node name
-        # (e.g. [Printer_1]). Available levels: log.debug(), log.info(), log.warning(), log.error()
+        # rosia's log function prefixes messages with the node name (e.g. [Printer_1])
+        # Available levels: log.debug(), log.info(), log.warning(), log.error()
 ```
 
 ## Wire and Run
@@ -43,11 +41,11 @@ app = Application()
 greeter = app.create_node(Greeter())
 printer = app.create_node(Printer())
 greeter.output >>= printer.message
-app.diagram(save_to="hello_diagram.svg")
+app.diagram(save_to="hello_diagram.png")
 app.execute()
 ```
 
-Optinally, `app.diagram(save_to="hello_diagram.svg")` generates an SVG visualization of the dataflow graph, showing nodes and their port connections:
+Optinally, `app.diagram(save_to="hello_diagram.png")` generates an SVG visualization of the dataflow graph, showing nodes and their port connections:
 
 ![Hello World Diagram](imgs/hello_diagram.png)
 

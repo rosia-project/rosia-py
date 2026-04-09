@@ -12,7 +12,7 @@ import pytest
 import rosia
 from rosia import InputPort, OutputPort, reaction, Node, Application
 from rosia import request_shutdown, log
-from rosia.time import s, ms, Time
+from rosia.time import ms, Time
 
 
 @Node
@@ -78,7 +78,7 @@ class Receiver:
         log.warning(
             f"REACT_B yield returned, logical_time={rosia.node_runtime_instance.logical_time}"
         )
-        request_shutdown(0 * s)
+        request_shutdown()
 
 
 def run(trace: bool = False):

@@ -12,7 +12,6 @@ from rosia import (
     Application,
     request_shutdown,
 )
-from rosia.time import s
 
 
 @Node
@@ -102,7 +101,7 @@ class Sender:
         with open(self.results_path, "w") as f:
             json.dump({str(k): v for k, v in self.all_results.items()}, f, indent=2)
         print(f"  Results saved to {self.results_path}")
-        request_shutdown(0 * s)
+        request_shutdown()
 
 
 def benchmark_rosia(

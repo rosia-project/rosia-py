@@ -18,7 +18,7 @@ class IntGenerator:
             yield 1 * s
             self.count += 1
             # time.sleep(0.01)
-        request_shutdown(0 * s)
+        request_shutdown()
 
 
 @Node

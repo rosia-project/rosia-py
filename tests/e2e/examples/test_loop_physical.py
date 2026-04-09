@@ -25,7 +25,7 @@ class Worker:
         log.info(f"Worker received: {self.input_int}")
         self.output_int(self.input_int)
         if self.input_int == 10:
-            request_shutdown(0 * s)
+            request_shutdown()
         # time.sleep(0.1)
 
 

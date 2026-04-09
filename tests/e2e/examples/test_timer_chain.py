@@ -31,7 +31,7 @@ class Printer:
     def print_message(self):
         self.receive_count += 1
         if self.receive_count >= 3:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @pytest.mark.timeout(30)

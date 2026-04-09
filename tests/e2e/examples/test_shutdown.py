@@ -17,7 +17,7 @@ class IntGenerator:
             self.output_int(self.count)
             self.count += 1
             if self.count > 2:
-                request_shutdown(0 * s)
+                request_shutdown()
                 break
             yield 1 * s
 

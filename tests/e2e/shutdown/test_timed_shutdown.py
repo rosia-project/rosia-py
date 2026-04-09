@@ -38,7 +38,7 @@ class Producer:
         self.output(self.count)
         self.count += 1
         if self.count >= self.max_ticks and not self.slow:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @Node

@@ -25,4 +25,4 @@ if __name__ == "__main__":
     printer = app.create_node(Printer())
     greeter.output >>= printer.message
     app.diagram(save_to="hello_diagram.png")
-    app.execute(trace=True)
+    app.execute()

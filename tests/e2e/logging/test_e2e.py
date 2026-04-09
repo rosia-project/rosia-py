@@ -33,7 +33,7 @@ class Source:
         self.output(self.count)
         self.count += 1
         if self.count >= 3:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @Node

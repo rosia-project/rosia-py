@@ -19,13 +19,13 @@ Each node has logical time `Time(0)` when `start()` is called at the beginning o
 
 # Safe To Advance To (STAT)
 
-Apart from logical time, each node also maintains a Safe To Advance To(STAT) time value. STAT acts as a safeguard for the increase of logical time: the node's logical time is only allowed to advance to $t$ < STAT. For eager reactions (see
-below), the bound is relaxed to $t$ <= STAT.
+Apart from logical time, each node also maintains a Safe To Advance To(STAT) time value. STAT acts as a safeguard for the increase of logical time: the node's logical time is only allowed to advance to $t \lt \text{STAT}$. For eager
+reactions (see below), the bound is relaxed to $t \leq \text{STAT}$.
 
 By default, STAT is set to `forever`, meaning that the logical time can grow whenever it wants. Consider a reaction triggered by two input ports A and B. If A receives a message with logical time $t_A$, the node will immediately advance to
-$t_A$ since $t_A < \text{STAT}=\text{forever}$. Now the node receives another message with logical time $t_B <= t_A$ and this will cause a problem since we now have to go backwards in time to process the new message.
+$t_A$ since $t_A \lt \text{STAT}=\text{forever}$. Now the node receives another message with logical time $t_B \leq t_A$ and this will cause a problem since we now have to go backwards in time to process the new message.
 
-This can be solved with STAT. If we know $t_B$ in advance and set STAT to $t_B$, since $t_B <= t_A$, when we receive the message on port A, we know that we cannot process it yet since we have to wait for the message from $t_B$.
+This can be solved with STAT. If we know $t_B$ in advance and set STAT to $t_B$, since $t_B \leq t_A$, when we receive the message on port A, we know that we cannot process it yet since we have to wait for the message from $t_B$.
 
 # Configuring STAT
 
@@ -43,7 +43,7 @@ timestamp). This will ensure that the downsteam will not advance it's logical ti
 In feedback loops (e.g., `A → B → A`), a normal `yield` can deadlock: the yield waits for STAT to advance strictly past the target time, but STAT depends on a message that can only be sent after the yield returns. This is a **causality
 loop**.
 
-`@reaction([...], eager=True)` resolves this by relaxing the STAT bound from $t$ < STAT to $t$ <= STAT. This allows the reaction to resume when its yield target equals STAT exactly, breaking the circular dependency.
+`@reaction([...], eager=True)` resolves this by relaxing the STAT bound from $t \lt \text{STAT}$ to $t \leq \text{STAT}$. This allows the reaction to resume when its yield target equals STAT exactly, breaking the circular dependency.
 
 ```python
 @reaction([action_in], eager=True)

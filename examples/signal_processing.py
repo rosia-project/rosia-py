@@ -104,7 +104,7 @@ class Printer:
         log.info(f"filtered = {self.input_signal}")
         self.count += 1
         if self.count >= self.max_samples:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 if __name__ == "__main__":

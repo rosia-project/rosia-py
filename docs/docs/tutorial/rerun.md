@@ -115,7 +115,7 @@ class BallSimulator:
         self.output(BallState(self.position, self.velocity, self.color))
         self.tick_count += 1
         if self.tick_count >= self.max_ticks:
-            request_shutdown(0 * s)
+            request_shutdown()
 
 
 @Node
