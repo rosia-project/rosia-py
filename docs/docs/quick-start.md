@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Quick Start
 
-Let's get started with **Rosia in less than 5 minutes**.
+Let's get started with **Rosia in less than 3 minutes**.
 
 ## Installation
 

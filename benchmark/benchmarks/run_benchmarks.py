@@ -61,7 +61,6 @@ RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "re
 def main():
     # Lazy imports to avoid circular dependency
     from rclpy_bench import benchmark_rclpy
-    from ray_bench import benchmark_ray
     from rosia_bench import benchmark_rosia
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -71,7 +70,7 @@ def main():
     benchmarks = {
         "rosia": lambda: benchmark_rosia(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
         "rclpy": lambda: benchmark_rclpy(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
-        "ray": lambda: benchmark_ray(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
+        # "ray": lambda: benchmark_ray(ARRAY_SIZES, num_iterations=NUM_ITERATIONS),
     }
 
     for name, run_fn in benchmarks.items():
