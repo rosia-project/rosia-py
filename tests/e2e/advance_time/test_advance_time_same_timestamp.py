@@ -75,9 +75,7 @@ class Receiver:
         # yield advances time — all remaining T=0 reactions
         # must fire BEFORE time advances past T=0
         yield 100 * ms
-        log.warning(
-            f"REACT_B yield returned, logical_time={rosia.node_runtime_instance.logical_time}"
-        )
+        log.warning(f"REACT_B yield returned, logical_time={rosia.node_runtime_instance.logical_time}")
         request_shutdown()
 
 

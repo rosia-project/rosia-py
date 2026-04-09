@@ -30,9 +30,7 @@ class Printer:
 
     @reaction([input_int1, input_int2])
     def print_message(self):
-        assert self.input_int1 == self.input_int2, (
-            "Input ports should have the same value"
-        )
+        assert self.input_int1 == self.input_int2, "Input ports should have the same value"
         self.receive_count += 1
         if self.receive_count >= 3:
             request_shutdown()

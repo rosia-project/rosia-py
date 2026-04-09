@@ -18,17 +18,11 @@ class RosiaAnnotations(TypedDict):
 
 def check_rosia_annotations(rosia_annotations: RosiaAnnotations) -> None:
     if rosia_annotations["original_init"] is None:
-        raise ValueError(
-            f"Original init is not set for class {rosia_annotations['original_cls'].__name__}"
-        )
+        raise ValueError(f"Original init is not set for class {rosia_annotations['original_cls'].__name__}")
     if rosia_annotations["original_cls"] is None:
-        raise ValueError(
-            f"Original cls is not set for class {rosia_annotations['original_cls'].__name__}"
-        )
+        raise ValueError(f"Original cls is not set for class {rosia_annotations['original_cls'].__name__}")
     if rosia_annotations["init_args"] is None:
-        raise ValueError(
-            f"Init args are not set for class {rosia_annotations['original_cls'].__name__}"
-        )
+        raise ValueError(f"Init args are not set for class {rosia_annotations['original_cls'].__name__}")
 
 
 def get_rosia_annotations(cls: Any) -> RosiaAnnotations:
@@ -52,10 +46,7 @@ def analyze_output_ports(func: Callable):
     tree = ast.parse(src)
     func_node = None
     for node in tree.body:
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == func.__name__
-        ):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func.__name__:
             func_node = node
             break
     if func_node is None:
@@ -94,9 +85,7 @@ def reaction(triggers: List[InputPort], eager=False) -> Callable[[Callable], Cal
 
 def Node(cls: Type[T]) -> Type[T]:
     original_init = get_class_effective_init(cls)
-    _rosia_annotations = RosiaAnnotations(
-        original_init=original_init, original_cls=cls, init_args=None
-    )
+    _rosia_annotations = RosiaAnnotations(original_init=original_init, original_cls=cls, init_args=None)
     update_rosia_annotations(cls, _rosia_annotations)
     setattr(cls, "__init__", record_init_args)
     return cls

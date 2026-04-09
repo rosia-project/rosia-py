@@ -22,9 +22,7 @@ class InputPort(Generic[T]):
 
     def _add_trigger_function(self, function: Callable) -> None:
         if function in self.trigger_functions:
-            raise ValueError(
-                f"Function {function} is already a trigger for {self.name}"
-            )
+            raise ValueError(f"Function {function} is already a trigger for {self.name}")
         self.trigger_functions.append(function)
 
     def __str__(self) -> str:

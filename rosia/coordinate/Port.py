@@ -53,9 +53,7 @@ class OutputPortRuntimeObj(Generic[T]):
         if STAT is not None:
             STAT += self.node_runtime.logical_time
         elif STAT is None:
-            STAT = min(
-                self.node_runtime.STAT, self.node_runtime.event_queue.peek_data_time()
-            )
+            STAT = min(self.node_runtime.STAT, self.node_runtime.event_queue.peek_data_time())
         if timestamp > STAT:
             raise ValueError(f"Timestamp {timestamp} is greater than STAT {STAT}")
         self.output_port_connector._set_value(value, timestamp, STAT)

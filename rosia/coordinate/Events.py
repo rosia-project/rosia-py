@@ -34,9 +34,7 @@ class Event:
 @dataclass
 class InputPortEvent(Event):
     priority: int = 0
-    input_port_values: Dict["InputPortConnector[Any]", Any] = field(
-        default_factory=dict
-    )
+    input_port_values: Dict["InputPortConnector[Any]", Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -58,9 +56,7 @@ class EventQueue:
         self._heap: List[Event] = []
         self._input_events: Dict[Time, InputPortEvent] = {}
 
-    def push_input_port_event(
-        self, timestamp: Time, input_port: "InputPortConnector[Any]", value: Any
-    ) -> None:
+    def push_input_port_event(self, timestamp: Time, input_port: "InputPortConnector[Any]", value: Any) -> None:
         existing = self._input_events.get(timestamp)
         if existing is not None:
             if input_port in existing.input_port_values:
@@ -78,9 +74,7 @@ class EventQueue:
         heapq.heappush(self._heap, event)
 
     def push_shutdown_event(self, timestamp: Time, status_code: int = 0) -> None:
-        heapq.heappush(
-            self._heap, ShutdownEvent(timestamp=timestamp, status_code=status_code)
-        )
+        heapq.heappush(self._heap, ShutdownEvent(timestamp=timestamp, status_code=status_code))
 
     def pop(self) -> Event:
         event = heapq.heappop(self._heap)

@@ -40,9 +40,7 @@ class InputPortConnector(PortConnector[T]):
         trigger_functions: List[Callable],
         affected_output_ports: "List[OutputPortConnector[T]]",
     ) -> None:
-        self.upstream_ports: List[
-            Tuple[OutputPortConnector[T], bool]
-        ] = []  # (port, is_physical)
+        self.upstream_ports: List[Tuple[OutputPortConnector[T], bool]] = []  # (port, is_physical)
         self.trigger_functions: List[Callable] = trigger_functions
         self.value: Optional[T] = None
         self.owner = owner
@@ -51,9 +49,7 @@ class InputPortConnector(PortConnector[T]):
         self.safe_to_advance_to: Time = forever
 
         self.port_type: ClientType
-        self.transport: Optional[TransportBase] = (
-            None  # Only set for SENDER ports (downstream ports of output ports)
-        )
+        self.transport: Optional[TransportBase] = None  # Only set for SENDER ports (downstream ports of output ports)
         self.affected_output_ports: List[OutputPortConnector[T]] = affected_output_ports
         self.active_upstream_count: int = 0  # Set during coordinator setup
 
@@ -65,9 +61,7 @@ class InputPortConnector(PortConnector[T]):
         for upstream_port, is_physical in self.upstream_ports:
             if is_physical:
                 continue
-            min_safe_to_advance_to = min(
-                min_safe_to_advance_to, upstream_port.safe_to_advance_to
-            )
+            min_safe_to_advance_to = min(min_safe_to_advance_to, upstream_port.safe_to_advance_to)
         self.safe_to_advance_to = min_safe_to_advance_to
 
     def get_upstream_port_by_name(self, name: str) -> "OutputPortConnector[T]":
@@ -79,9 +73,7 @@ class InputPortConnector(PortConnector[T]):
     def _get_endpoint(self) -> str:
         # Get endpoint from parent node's transport
         if self.owner.transport is None:
-            raise RuntimeError(
-                f"Transport not initialized for node {self.owner.node_name}"
-            )
+            raise RuntimeError(f"Transport not initialized for node {self.owner.node_name}")
         return self.owner.transport.endpoint
 
     def set_value(self, msg: Message[T]) -> None:

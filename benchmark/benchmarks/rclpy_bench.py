@@ -14,9 +14,7 @@ def pack_array_and_scalar(array: np.ndarray, multiplier: float) -> Float64MultiA
     """Pack array and scalar multiplier into a single message. Last element is the multiplier."""
     msg = Float64MultiArray()
     msg.layout = MultiArrayLayout(
-        dim=[
-            MultiArrayDimension(label="array_size", size=array.size, stride=array.size)
-        ],
+        dim=[MultiArrayDimension(label="array_size", size=array.size, stride=array.size)],
         data_offset=0,
     )
     msg.data = array.ravel().tolist() + [multiplier]
@@ -87,9 +85,7 @@ class SenderNode(Node):  # type: ignore
     def result_callback(self, msg: Float64MultiArray):  # type: ignore
         self.result_queue.put(msg)  # type: ignore
 
-    def send_and_receive(
-        self, array: np.ndarray, multiplier: float, timeout: float = 5.0
-    ) -> np.ndarray:
+    def send_and_receive(self, array: np.ndarray, multiplier: float, timeout: float = 5.0) -> np.ndarray:
         self.data_pub.publish(pack_array_and_scalar(array, multiplier))
         try:
             result_msg = self.result_queue.get(timeout=timeout)  # type: ignore

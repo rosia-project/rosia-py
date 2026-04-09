@@ -55,9 +55,7 @@ class NodeRuntime:
         node_cls = rosia_annotations["original_cls"]
         self.coordinator_transport_endpoint = coordinator_transport_endpoint
 
-        self.node_cls = clone_class_detached(
-            node_cls, f"{node_cls.__name__}NodeRuntime"
-        )
+        self.node_cls = clone_class_detached(node_cls, f"{node_cls.__name__}NodeRuntime")
         self.node_original_init = rosia_annotations["original_init"]
         self.node_init_args = rosia_annotations["init_args"]
         self.node_name = node_name
@@ -77,9 +75,7 @@ class NodeRuntime:
 
         self.init_ports()
 
-        setattr(
-            self.node_cls, "__init__", empty_function
-        )  # Replace the record_init_args function with empty_function
+        setattr(self.node_cls, "__init__", empty_function)  # Replace the record_init_args function with empty_function
         self.node_instance = self.node_cls()
         self.logger = Logger(self.node_name)
 
@@ -108,9 +104,7 @@ class NodeRuntime:
                 for port_name in affected_output_port_names:
                     output_port_name = f"{self.node_name}.{port_name}"
                     if output_port_name in self.output_port_connectors:
-                        affected_output_ports.append(
-                            self.output_port_connectors[output_port_name]
-                        )
+                        affected_output_ports.append(self.output_port_connectors[output_port_name])
 
                 input_port = InputPortConnector(
                     owner=self,
@@ -125,9 +119,7 @@ class NodeRuntime:
                 self.__setattr__(name, input_port)
                 setattr(self.node_cls, name, input_port_runtime_object)
 
-    def init_remote(
-        self, execution_config: ExecutionConfig, rerun_config: Optional[RerunConfig]
-    ) -> Dict[str, str]:
+    def init_remote(self, execution_config: ExecutionConfig, rerun_config: Optional[RerunConfig]) -> Dict[str, str]:
         self.execution_config = execution_config
         rosia.logger.set_target(self.logger)  # type: ignore # overwrite the global logger
         self.logger.set_level(execution_config.log_level)
@@ -169,19 +161,13 @@ class NodeRuntime:
                 f"Node init args are not set for node {self.node_name}. This is a bug within the Rosia framework."
             )
         rosia.node_runtime_instance = self
-        self.coordinator_transport = Transport(
-            ClientType.SENDER, Serializer, self.coordinator_transport_endpoint
-        )
-        self.node_instance.__init__(
-            self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs
-        )
+        self.coordinator_transport = Transport(ClientType.SENDER, Serializer, self.coordinator_transport_endpoint)
+        self.node_instance.__init__(self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs)
 
     def get_output_port_STAT(self) -> Dict[str, Time]:
         output_port_safe_to_advance_to = {}
         for output_port in self.output_port_connectors.values():
-            output_port_safe_to_advance_to[output_port.name] = (
-                output_port.safe_to_advance_to
-            )
+            output_port_safe_to_advance_to[output_port.name] = output_port.safe_to_advance_to
         return output_port_safe_to_advance_to
 
     def set_output_port_STAT(self, output_port_to_sta: Dict[str, Time]) -> None:
@@ -202,12 +188,8 @@ class NodeRuntime:
                 self.request_shutdown(0 * s, status_code=1)
             self.update_STAT()
 
-            has_work = (
-                self.event_queue.peek_time() is not None
-                and self.event_queue.peek_time() < self.STAT
-            ) or (
-                self.reaction_queue.peek_time() is not None
-                and self.reaction_queue.peek_time() <= self.STAT
+            has_work = (self.event_queue.peek_time() is not None and self.event_queue.peek_time() < self.STAT) or (
+                self.reaction_queue.peek_time() is not None and self.reaction_queue.peek_time() <= self.STAT
             )
 
             if has_work:
@@ -242,14 +224,10 @@ class NodeRuntime:
                 return  # Wait unless an eager reaction is at exactly STAT
 
             if advance_to_time < self.logical_time:
-                self.logger.warning(
-                    f"Logical time decrease: {self.logical_time} -> {advance_to_time}"
-                )
+                self.logger.warning(f"Logical time decrease: {self.logical_time} -> {advance_to_time}")
 
             if self.logger._trace and advance_to_time != self.logical_time:
-                self.logger.debug(
-                    f"Logical time: {self.logical_time} -> {advance_to_time}"
-                )
+                self.logger.debug(f"Logical time: {self.logical_time} -> {advance_to_time}")
             self.logical_time = advance_to_time
             self.logger.set_logical_time(advance_to_time)
             self.logger.set_physical_time(get_physical_time())
@@ -259,10 +237,7 @@ class NodeRuntime:
             if advance_to_time >= self.STAT:
                 return
 
-            while (
-                self.event_queue.peek_time() is not None
-                and self.event_queue.peek_time() == advance_to_time
-            ):
+            while self.event_queue.peek_time() is not None and self.event_queue.peek_time() == advance_to_time:
                 event = self.event_queue.pop()
                 assert event is not None, "Event is None"
                 if isinstance(event, InputPortEvent):
@@ -285,10 +260,7 @@ class NodeRuntime:
             self.execute_reactions(advance_to_time)
 
     def execute_reactions(self, timestamp: Time) -> None:
-        while (
-            self.reaction_queue.peek_time() is not None
-            and self.reaction_queue.peek_time() == timestamp
-        ):
+        while self.reaction_queue.peek_time() is not None and self.reaction_queue.peek_time() == timestamp:
             reaction, is_shutdown = self.reaction_queue.dequeue()
             if is_shutdown:
                 self.shutdown()
@@ -306,18 +278,14 @@ class NodeRuntime:
 
             if isinstance(message, ApplicationRequestShutdownMessage):
                 if message.timestamp is None:
-                    raise ValueError(
-                        "ApplicationRequestShutdownMessage timestamp is None"
-                    )
+                    raise ValueError("ApplicationRequestShutdownMessage timestamp is None")
                 requested_time = message.timestamp
                 if self.logical_time > requested_time:
                     response_time = self.logical_time
                 else:
                     response_time = requested_time
                 self.shutdown_time_barrier = response_time + Time(1)
-                self.coordinator_transport.send(
-                    ApplicationShutdownResponseMessage(timestamp=response_time)
-                )
+                self.coordinator_transport.send(ApplicationShutdownResponseMessage(timestamp=response_time))
             elif isinstance(message, ShutdownMessage):
                 if message.timestamp is None:
                     raise ValueError("Shutdown message timestamp is None")
@@ -333,14 +301,10 @@ class NodeRuntime:
                 self.event_queue.push_shutdown_event(message.timestamp)
             elif isinstance(message, NoMoreMessage):
                 if message.to_port not in self.input_port_connectors:
-                    raise ValueError(
-                        f"NoMoreMessage to_port {message.to_port} not found in node {self.node_name}"
-                    )
+                    raise ValueError(f"NoMoreMessage to_port {message.to_port} not found in node {self.node_name}")
                 input_port = self.input_port_connectors[message.to_port]
                 input_port.active_upstream_count -= 1
-                from_output_port = input_port.get_upstream_port_by_name(
-                    message.from_port
-                )
+                from_output_port = input_port.get_upstream_port_by_name(message.from_port)
                 from_output_port.safe_to_advance_to = forever
                 input_port.update_safe_to_advance_to()
             elif isinstance(message, Message):
@@ -351,12 +315,8 @@ class NodeRuntime:
 
                 if message.STAT is not None:
                     from_output_port_name = message.from_port
-                    assert from_output_port_name is not None, (
-                        f"Message from_port {message.from_port} is None"
-                    )
-                    from_output_port = input_port.get_upstream_port_by_name(
-                        from_output_port_name
-                    )
+                    assert from_output_port_name is not None, f"Message from_port {message.from_port} is None"
+                    from_output_port = input_port.get_upstream_port_by_name(from_output_port_name)
                     from_output_port.safe_to_advance_to = max(
                         from_output_port.safe_to_advance_to,
                         message.STAT,
@@ -367,29 +327,19 @@ class NodeRuntime:
                 if message.timestamp is None:  # physical message
                     input_port.set_value_from_event(message.data)
                     for trigger_function in input_port.trigger_functions:
-                        reaction = Reaction(
-                            trigger_function, self.logical_time, self.node_instance
-                        )
+                        reaction = Reaction(trigger_function, self.logical_time, self.node_instance)
                         self.reaction_queue.enqueue(reaction)
                 else:
-                    self.event_queue.push_input_port_event(
-                        message.timestamp, input_port, message.data
-                    )
+                    self.event_queue.push_input_port_event(message.timestamp, input_port, message.data)
             else:
-                raise ValueError(
-                    f"Unexpected message type: [{type(message)}] {message}"
-                )
+                raise ValueError(f"Unexpected message type: [{type(message)}] {message}")
 
     def update_STAT(self) -> None:
         min_safe_to_advance_to = forever
         for input_port in self.input_port_connectors.values():
-            min_safe_to_advance_to = min(
-                min_safe_to_advance_to, input_port.safe_to_advance_to
-            )
+            min_safe_to_advance_to = min(min_safe_to_advance_to, input_port.safe_to_advance_to)
         if min_safe_to_advance_to < self.STAT and self.STAT != forever:
-            self.logger.warning(
-                f"STAT decrease: {self.STAT} -> {min_safe_to_advance_to}"
-            )
+            self.logger.warning(f"STAT decrease: {self.STAT} -> {min_safe_to_advance_to}")
         min_safe_to_advance_to = min(min_safe_to_advance_to, self.shutdown_time_barrier)
         if self.logger._trace and self.STAT != min_safe_to_advance_to:
             self.logger.debug(f"STAT: {self.STAT} -> {min_safe_to_advance_to}")
@@ -404,35 +354,25 @@ class NodeRuntime:
             self.startup(start_logical_time)
 
             if self.check_natural_shutdown():
-                self.coordinator_transport.send(
-                    ExitMessage(timestamp=None, node_name=self.node_name)
-                )
+                self.coordinator_transport.send(ExitMessage(timestamp=None, node_name=self.node_name))
                 self.shutdown()
 
             self.event_loop()
 
-            self.coordinator_transport.send(
-                ExitMessage(timestamp=None, node_name=self.node_name)
-            )
+            self.coordinator_transport.send(ExitMessage(timestamp=None, node_name=self.node_name))
             self.shutdown(status_code=0)
         except Exception as e:
             print(f"Exception in {self.node_name}: {e}")
             traceback.print_exc()
-            self.coordinator_transport.send(
-                NodeForceShutdownRequest(timestamp=self.logical_time, status_code=1)
-            )
+            self.coordinator_transport.send(NodeForceShutdownRequest(timestamp=self.logical_time, status_code=1))
             self.close_transports()
             sys.exit(1)
 
     def request_shutdown(self, delay: Time = Time(0), status_code: int = 0) -> None:
         shutdown_timestamp = self.logical_time + delay
-        self.logger.debug(
-            f"Requesting shutdown in {delay} at time {shutdown_timestamp}"
-        )
+        self.logger.debug(f"Requesting shutdown in {delay} at time {shutdown_timestamp}")
         self.coordinator_transport.send(
-            NodeRequestShutdownMessage(
-                timestamp=shutdown_timestamp, status_code=status_code
-            )
+            NodeRequestShutdownMessage(timestamp=shutdown_timestamp, status_code=status_code)
         )
 
     def startup(self, start_logical_time: Time) -> None:
@@ -440,10 +380,7 @@ class NodeRuntime:
         if hasattr(self.node_instance, "start"):
             if not inspect.signature(self.node_instance.start).parameters:
                 start_reaction = Reaction(self.node_instance.start, Time(0))
-            elif (
-                "start_logical_time"
-                in inspect.signature(self.node_instance.start).parameters
-            ):
+            elif "start_logical_time" in inspect.signature(self.node_instance.start).parameters:
                 start_reaction = Reaction(
                     self.node_instance.start,
                     Time(0),
@@ -466,11 +403,7 @@ class NodeRuntime:
                 return True
             return True
 
-        if (
-            not self.event_queue
-            and not self.reaction_queue.has_pending()
-            and all_done()
-        ):
+        if not self.event_queue and not self.reaction_queue.has_pending() and all_done():
             for output_port in self.output_port_connectors.values():
                 for downstream_port, is_physical in output_port.downstream_ports:
                     if downstream_port.transport is not None:
@@ -492,10 +425,7 @@ class NodeRuntime:
         closed: set[int] = set()
         for output_port in self.output_port_connectors.values():
             for downstream_port, is_physical in output_port.downstream_ports:
-                if (
-                    downstream_port.transport is not None
-                    and id(downstream_port.transport) not in closed
-                ):
+                if downstream_port.transport is not None and id(downstream_port.transport) not in closed:
                     downstream_port.transport.close()
                     closed.add(id(downstream_port.transport))
 

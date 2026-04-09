@@ -85,9 +85,7 @@ class Sender:
             if self.size_idx >= len(self.array_sizes):
                 self.save_results()
                 return
-            self.current_array = np.random.rand(self.array_sizes[self.size_idx]).astype(
-                np.float64
-            )
+            self.current_array = np.random.rand(self.array_sizes[self.size_idx]).astype(np.float64)
             self.warmup = True
             self.iteration = 0
             self.times = []
@@ -109,17 +107,11 @@ def benchmark_rosia(
 ) -> Dict[int, List[float]]:
     print("\n=== Benchmarking rosia ===")
 
-    default_results_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "results"
-    )
-    results_path = (
-        os.environ.get("RESULTS_DIR", default_results_dir) + "/rosia_results.json"
-    )
+    default_results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results")
+    results_path = os.environ.get("RESULTS_DIR", default_results_dir) + "/rosia_results.json"
 
     app = Application()
-    sender = app.create_node(
-        Sender(array_sizes, multiplier_value, num_iterations, results_path)
-    )
+    sender = app.create_node(Sender(array_sizes, multiplier_value, num_iterations, results_path))
     multiplier = app.create_node(Multiplier())
 
     sender.data_out >>= multiplier.input_data

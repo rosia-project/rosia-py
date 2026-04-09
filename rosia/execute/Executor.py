@@ -16,14 +16,8 @@ class Executor:
     def __init__(self, cls: Any, controller_endpoint: str):
         self.cls = cls
         self.server = Server(ClientType.RECEIVER, Serializer)
-        startup_client = Client(
-            ClientType.SENDER, Serializer, endpoint=controller_endpoint
-        )
-        asyncio.run(
-            startup_client.request(
-                ExecutorStartupMessage(executor_receive_endpoint=self.server.endpoint)
-            )
-        )
+        startup_client = Client(ClientType.SENDER, Serializer, endpoint=controller_endpoint)
+        asyncio.run(startup_client.request(ExecutorStartupMessage(executor_receive_endpoint=self.server.endpoint)))
         startup_client.close()
 
     def handle_request(self, request_message: Any) -> ExecutorExecuteResponseMessage:
@@ -32,9 +26,7 @@ class Executor:
             or request_message.error_message is not None
             or request_message.func_name == ""
         ):
-            return ExecutorExecuteResponseMessage(
-                error_message="Failed to process request: " + str(request_message)
-            )
+            return ExecutorExecuteResponseMessage(error_message="Failed to process request: " + str(request_message))
         return self.call(
             request_message.func_name,
             *request_message.args,
@@ -89,9 +81,7 @@ class ExecutorController:
             or startup_message.error_message is not None
             or startup_message.executor_receive_endpoint == ""
         ):
-            raise RuntimeError(
-                "Failed to start executor process: " + str(startup_message)
-            )
+            raise RuntimeError("Failed to start executor process: " + str(startup_message))
         self.client = Client(
             ClientType.SENDER,
             Serializer,

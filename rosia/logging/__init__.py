@@ -61,9 +61,7 @@ class Logger:
     def _log(self, level: int, msg: str, rerun_subpath: str = "") -> None:
         if self._level <= level:
             style = _LEVEL_STYLES.get(level, "")
-            self.console.print(
-                f"[{style}]\\[{self._name}] {msg}[/{style}]", highlight=False
-            )
+            self.console.print(f"[{style}]\\[{self._name}] {msg}[/{style}]", highlight=False)
         if self._trace and self._rerun_manager is not None:
             self._rerun_manager.log(
                 f"trace/{self._name}/{rerun_subpath}",

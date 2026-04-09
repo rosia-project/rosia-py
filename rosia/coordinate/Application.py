@@ -46,9 +46,7 @@ class Application:
     def create_node(self, node_cls: T) -> T:
         rosia_annotations = get_rosia_annotations(node_cls)
         check_rosia_annotations(rosia_annotations)
-        node_name = (
-            f"{rosia_annotations['original_cls'].__name__}_{len(self.node_infos)}"
-        )
+        node_name = f"{rosia_annotations['original_cls'].__name__}_{len(self.node_infos)}"
         node_runtime = NodeRuntime(
             rosia_annotations=rosia_annotations,
             node_name=node_name,
@@ -102,9 +100,7 @@ class Application:
         timeout: Optional[float] = None,
     ) -> None:
         if log_level.upper() not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-            raise ValueError(
-                f"Invalid log level: {log_level}, valid levels are: DEBUG, INFO, WARNING, ERROR, CRITICAL"
-            )
+            raise ValueError(f"Invalid log level: {log_level}, valid levels are: DEBUG, INFO, WARNING, ERROR, CRITICAL")
         log_level_int = getattr(logging, log_level.upper(), logging.INFO)
         execution_config = ExecutionConfig(trace=trace, log_level=log_level_int)
         self.execution_config = execution_config
@@ -138,28 +134,20 @@ class Application:
 
         self.logger.debug("Initializing node instances...")
         await asyncio.gather(
-            *(
-                executor_controller.call("init_node_instance")
-                for executor_controller in executor_controllers.values()
-            )
+            *(executor_controller.call("init_node_instance") for executor_controller in executor_controllers.values())
         )
 
         self.logger.debug("Collecting output port safe to advance to values...")
         output_port_safe_to_advance_to = {}
         dstat_results = await asyncio.gather(
-            *(
-                executor_controller.call("get_output_port_STAT")
-                for executor_controller in executor_controllers.values()
-            )
+            *(executor_controller.call("get_output_port_STAT") for executor_controller in executor_controllers.values())
         )
         for dstat in dstat_results:
             output_port_safe_to_advance_to.update(dstat)
 
         self.logger.debug("Propagating output port STATs...")
 
-        def propagate_output_STAT(
-            port: OutputPortConnector, propagated: List[str]
-        ) -> None:
+        def propagate_output_STAT(port: OutputPortConnector, propagated: List[str]) -> None:
             if port.name in propagated:
                 return
             propagated.append(port.name)
@@ -221,9 +209,7 @@ class Application:
 
         prev_handler = signal.signal(signal.SIGINT, signal.default_int_handler)
         try:
-            has_message = self.coordinator_receiver_transport.wait_for_message(
-                timeout=timeout_ms
-            )
+            has_message = self.coordinator_receiver_transport.wait_for_message(timeout=timeout_ms)
         except KeyboardInterrupt:
             has_message = False
             self.logger.warning("KeyboardInterrupt received, initiating shutdown...")
@@ -266,9 +252,7 @@ class Application:
 
         # If all nodes exited naturally, no shutdown negotiation needed
         if not alive_nodes:
-            self.logger.debug(
-                "All nodes exited naturally, skipping shutdown negotiation"
-            )
+            self.logger.debug("All nodes exited naturally, skipping shutdown negotiation")
             for name, node_info in self.node_infos.items():
                 if node_info.executor is not None:
                     node_info.executor.join()
@@ -283,18 +267,12 @@ class Application:
         self.logger.set_physical_time(get_physical_time() - start_physical_time)
 
         # Send ApplicationRequestShutdownMessage to alive nodes only
-        self.logger.debug(
-            f"Sending ApplicationRequestShutdownMessage to alive nodes: {alive_nodes}"
-        )
+        self.logger.debug(f"Sending ApplicationRequestShutdownMessage to alive nodes: {alive_nodes}")
         node_sender_transports: Dict[str, Transport] = {}
         for name in alive_nodes:
-            sender_transport = Transport(
-                ClientType.SENDER, Serializer, self.node_endpoints[name]
-            )
+            sender_transport = Transport(ClientType.SENDER, Serializer, self.node_endpoints[name])
             node_sender_transports[name] = sender_transport
-            sender_transport.send(
-                ApplicationRequestShutdownMessage(timestamp=shutdown_timestamp)
-            )
+            sender_transport.send(ApplicationRequestShutdownMessage(timestamp=shutdown_timestamp))
 
         # Collect ApplicationShutdownResponseMessages from alive nodes
         self.logger.debug("Collecting shutdown responses from alive nodes...")
@@ -304,22 +282,16 @@ class Application:
             self.coordinator_receiver_transport.wait_for_message()
             response = self.coordinator_receiver_transport.receive()
             if isinstance(response, ExitMessage):
-                self.logger.debug(
-                    f"Node {response.node_name} exited during negotiation"
-                )
+                self.logger.debug(f"Node {response.node_name} exited during negotiation")
                 if response.node_name in alive_nodes:
                     alive_nodes.discard(response.node_name)
                     expected_responses -= 1
                 continue
             if not isinstance(response, ApplicationShutdownResponseMessage):
                 if isinstance(response, NodeRequestShutdownMessage):
-                    self.logger.warning(
-                        "Duplicate shutdown request received by application"
-                    )
+                    self.logger.warning("Duplicate shutdown request received by application")
                 else:
-                    self.logger.warning(
-                        f"Ignoring unexpected message during shutdown negotiation: {response}"
-                    )
+                    self.logger.warning(f"Ignoring unexpected message during shutdown negotiation: {response}")
                 continue
             if response.timestamp is None:
                 raise ValueError("ApplicationShutdownResponseMessage timestamp is None")
@@ -330,19 +302,13 @@ class Application:
             self.logger.warning(
                 f"Actual shutdown time {max_shutdown_timestamp} is beyond the requested shutdown logical time {shutdown_timestamp}"
             )
-        self.logger.debug(
-            f"Shutdown negotiation complete. Shutdown time: {max_shutdown_timestamp}"
-        )
+        self.logger.debug(f"Shutdown negotiation complete. Shutdown time: {max_shutdown_timestamp}")
 
         # Send ShutdownMessage to alive nodes with the real shutdown time
         for name in alive_nodes:
             if name in node_sender_transports:
-                self.logger.debug(
-                    f"Sending shutdown message to node: {name} with timestamp {max_shutdown_timestamp}"
-                )
-                node_sender_transports[name].send(
-                    ShutdownMessage(timestamp=max_shutdown_timestamp)
-                )
+                self.logger.debug(f"Sending shutdown message to node: {name} with timestamp {max_shutdown_timestamp}")
+                node_sender_transports[name].send(ShutdownMessage(timestamp=max_shutdown_timestamp))
 
         # Wait for all child processes to finish so they can flush output
         # and release resources cleanly before the main process exits.
@@ -359,14 +325,10 @@ class Application:
             sys.exit(status_code)
 
     def _force_shutdown(self, alive_nodes: set[str]) -> None:
-        self.logger.debug(
-            f"Force shutdown: sending ShutdownMessage to alive nodes: {alive_nodes}"
-        )
+        self.logger.debug(f"Force shutdown: sending ShutdownMessage to alive nodes: {alive_nodes}")
         sender_transports = []
         for name in alive_nodes:
-            sender_transport = Transport(
-                ClientType.SENDER, Serializer, self.node_endpoints[name]
-            )
+            sender_transport = Transport(ClientType.SENDER, Serializer, self.node_endpoints[name])
             sender_transport.send(ShutdownMessage(timestamp=never))
             sender_transports.append(sender_transport)
         for name, node_info in self.node_infos.items():

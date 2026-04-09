@@ -125,9 +125,7 @@ def _compute_canvas_size(graph: "Graph", y_offset: float) -> Tuple[int, int]:
             all_y.append(by)
     max_x = max(all_x, default=0)
     max_y = max(all_y, default=0)
-    return int(max_x * SCALE + 2 * PADDING), int(
-        (max_y + y_offset + 20) * SCALE + 2 * PADDING
-    )
+    return int(max_x * SCALE + 2 * PADDING), int((max_y + y_offset + 20) * SCALE + 2 * PADDING)
 
 
 def _load_icon_b64(name: str) -> Optional[str]:
@@ -145,9 +143,7 @@ def _load_icon_b64(name: str) -> Optional[str]:
 # ── Port positions ──────────────────────────────────────────────────────────
 
 
-def _build_port_positions(
-    graph: "Graph", y_offset: float, icons: dict
-) -> Dict[str, Tuple[float, float]]:
+def _build_port_positions(graph: "Graph", y_offset: float, icons: dict) -> Dict[str, Tuple[float, float]]:
     positions: Dict[str, Tuple[float, float]] = {}
     for node in graph.nodes:
         nx, ny = _to_screen(node.x, node.y, y_offset)
@@ -159,11 +155,7 @@ def _build_port_positions(
             if is_icon and icon_config is not None:
                 conn_inset = icon_config.get("connection_inset", 0) * SCALE
                 cx = nx + nw / 2
-                px = (
-                    cx - ICON_SIZE / 2 + conn_inset
-                    if port.is_input
-                    else cx + ICON_SIZE / 2 - conn_inset
-                )
+                px = cx - ICON_SIZE / 2 + conn_inset if port.is_input else cx + ICON_SIZE / 2 - conn_inset
             else:
                 px = nx if port.is_input else nx + nw
             positions[port.id] = (px, py)
@@ -188,8 +180,7 @@ def _svg_icon_node(node: "Node", y_offset: float, icon_b64: str) -> str:
     ix = nx + nw / 2 - ICON_SIZE / 2
     iy = ny + port_y - ICON_SIZE / 2
     parts = [
-        f'<image x="{ix}" y="{iy}" width="{ICON_SIZE}" height="{ICON_SIZE}" '
-        f'href="{icon_b64}"/>',
+        f'<image x="{ix}" y="{iy}" width="{ICON_SIZE}" height="{ICON_SIZE}" href="{icon_b64}"/>',
     ]
     if node.node_type == "Timer" and node.init_args:
         label = _get_timer_label(node.init_args)
@@ -271,16 +262,8 @@ def _svg_rect_node(node: "Node", idx: int, y_offset: float) -> str:
         parts.append(_svg_port(port, nx, ny, nw, is_input=False))
 
     # Reactions
-    left_zone_end = (
-        nx + NODE_PAD_H * SCALE + _max_port_label_width(node, True) + PORT_TEXT_PAD
-    )
-    right_zone_start = (
-        nx
-        + nw
-        - NODE_PAD_H * SCALE
-        - _max_port_label_width(node, False)
-        - PORT_TEXT_PAD
-    )
+    left_zone_end = nx + NODE_PAD_H * SCALE + _max_port_label_width(node, True) + PORT_TEXT_PAD
+    right_zone_start = nx + nw - NODE_PAD_H * SCALE - _max_port_label_width(node, False) - PORT_TEXT_PAD
     if not input_ports:
         left_zone_end = nx + NODE_PAD_H * SCALE
     if not output_ports:
@@ -301,9 +284,7 @@ def _svg_rect_node(node: "Node", idx: int, y_offset: float) -> str:
 # ── Port SVG ────────────────────────────────────────────────────────────────
 
 
-def _svg_port(
-    port: "Port", node_x: float, node_y: float, node_w: float, is_input: bool
-) -> str:
+def _svg_port(port: "Port", node_x: float, node_y: float, node_w: float, is_input: bool) -> str:
     py = node_y + port.y * SCALE
     size = PORT_TRIANGLE_SIZE
 
@@ -389,31 +370,14 @@ def _svg_internal_connections(
         for port_id in reaction.trigger_ports:
             if port_id in port_screen_y:
                 py = port_screen_y[port_id]
-                sx = (
-                    node_x
-                    + PORT_TEXT_PAD
-                    + _port_label_width(node, port_id)
-                    + 4 * SCALE
-                )
-                lines.append(
-                    f'<line x1="{sx}" y1="{py}" x2="{rlx}" y2="{rly}" '
-                    f'stroke="{color}" stroke-width="{lw}"/>'
-                )
+                sx = node_x + PORT_TEXT_PAD + _port_label_width(node, port_id) + 4 * SCALE
+                lines.append(f'<line x1="{sx}" y1="{py}" x2="{rlx}" y2="{rly}" stroke="{color}" stroke-width="{lw}"/>')
 
         for port_id in reaction.effect_ports:
             if port_id in port_screen_y:
                 py = port_screen_y[port_id]
-                ex = (
-                    node_x
-                    + node_w
-                    - PORT_TEXT_PAD
-                    - _port_label_width(node, port_id)
-                    - 4 * SCALE
-                )
-                lines.append(
-                    f'<line x1="{rrx}" y1="{rry}" x2="{ex}" y2="{py}" '
-                    f'stroke="{color}" stroke-width="{lw}"/>'
-                )
+                ex = node_x + node_w - PORT_TEXT_PAD - _port_label_width(node, port_id) - 4 * SCALE
+                lines.append(f'<line x1="{rrx}" y1="{rry}" x2="{ex}" y2="{py}" stroke="{color}" stroke-width="{lw}"/>')
 
     return "\n  ".join(lines)
 
@@ -581,9 +545,7 @@ def _svg_arrowhead(from_pt: Tuple[float, float], to_pt: Tuple[float, float]) -> 
     al = ARROWHEAD_LENGTH
     aw = ARROWHEAD_WIDTH / 2
     pts = (
-        f"{tx},{ty} "
-        f"{tx - ux * al + px * aw},{ty - uy * al + py * aw} "
-        f"{tx - ux * al - px * aw},{ty - uy * al - py * aw}"
+        f"{tx},{ty} {tx - ux * al + px * aw},{ty - uy * al + py * aw} {tx - ux * al - px * aw},{ty - uy * al - py * aw}"
     )
     return f'<polygon points="{pts}" fill="{COLORS["arrowhead"]}"/>'
 

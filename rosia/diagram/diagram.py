@@ -157,9 +157,7 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
         # Build edges from output→downstream connections
         for port_name, connector in runtime.output_port_connectors.items():
             for downstream, is_physical in connector.downstream_ports:
-                graph.edges.append(
-                    Edge(source_port=port_name, target_port=downstream.name)
-                )
+                graph.edges.append(Edge(source_port=port_name, target_port=downstream.name))
 
     return graph
 
@@ -268,14 +266,8 @@ def _compute_node_layout(
     name_width = len(name) * CHAR_WIDTH_HEADER + 2 * NODE_PAD_H
 
     # Body width: port_tri + gap + label + reaction_gap + reaction + reaction_gap + label + gap + port_tri + padding
-    left_w = (
-        PORT_TRI_SIZE + PORT_LABEL_GAP + max_in_label * CHAR_WIDTH if input_ports else 0
-    )
-    right_w = (
-        max_out_label * CHAR_WIDTH + PORT_LABEL_GAP + PORT_TRI_SIZE
-        if output_ports
-        else 0
-    )
+    left_w = PORT_TRI_SIZE + PORT_LABEL_GAP + max_in_label * CHAR_WIDTH if input_ports else 0
+    right_w = max_out_label * CHAR_WIDTH + PORT_LABEL_GAP + PORT_TRI_SIZE if output_ports else 0
     reaction_w = (
         max(
             max_reaction_label * CHAR_WIDTH + 2 * REACTION_POINTINESS + 16,
@@ -286,9 +278,7 @@ def _compute_node_layout(
     )
     gap_left = REACTION_GAP_H if (input_ports and reactions) else 0
     gap_right = REACTION_GAP_H if (output_ports and reactions) else 0
-    content_width = (
-        left_w + gap_left + reaction_w + gap_right + right_w + 2 * NODE_PAD_H
-    )
+    content_width = left_w + gap_left + reaction_w + gap_right + right_w + 2 * NODE_PAD_H
 
     width = max(name_width, content_width, MIN_NODE_WIDTH)
     height = max(height, MIN_NODE_HEIGHT)
@@ -340,8 +330,7 @@ def layout_graph(graph: Graph) -> None:
         )
 
     elk_edges = [
-        {"id": f"e{i}", "sources": [e.source_port], "targets": [e.target_port]}
-        for i, e in enumerate(graph.edges)
+        {"id": f"e{i}", "sources": [e.source_port], "targets": [e.target_port]} for i, e in enumerate(graph.edges)
     ]
 
     elk_graph = {
@@ -402,9 +391,7 @@ def _spread_vertical_segments(graph: Graph) -> None:
         return
 
     # Build sorted list of node x-intervals: [(left, right), ...]
-    node_intervals = sorted(
-        [(n.x, n.x + n.width) for n in graph.nodes], key=lambda iv: iv[0]
-    )
+    node_intervals = sorted([(n.x, n.x + n.width) for n in graph.nodes], key=lambda iv: iv[0])
 
     # For each edge with bend points, collect (bend_x, edge_index, bp_index)
     # grouped by which gap they fall into.
@@ -458,9 +445,7 @@ def _find_gap(x: float, intervals: List[Tuple[float, float]]) -> int:
     return len(intervals)
 
 
-def _gap_bounds(
-    gap_idx: int, intervals: List[Tuple[float, float]]
-) -> Tuple[float, float]:
+def _gap_bounds(gap_idx: int, intervals: List[Tuple[float, float]]) -> Tuple[float, float]:
     """Get the (left, right) x-bounds of a gap between nodes."""
     if gap_idx == 0:
         left = 0

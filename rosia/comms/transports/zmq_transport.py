@@ -22,9 +22,7 @@ class ZMQTransport(TransportBase):
             self.socket = context.socket(zmq.PUSH)
             self.socket.connect(endpoint)
         else:
-            assert endpoint == "", (
-                "Endpoint will be automatically assigned for receiver."
-            )
+            assert endpoint == "", "Endpoint will be automatically assigned for receiver."
             self.socket = context.socket(zmq.PULL)
             port = self.socket.bind_to_random_port("tcp://127.0.0.1")
             self.endpoint = f"tcp://127.0.0.1:{port}"
@@ -41,9 +39,7 @@ class ZMQTransport(TransportBase):
             return None
 
     def wait_for_message(self, timeout: int = -1) -> bool:
-        assert self.type == ClientType.RECEIVER, (
-            "Cannot wait for a message on a sender socket."
-        )
+        assert self.type == ClientType.RECEIVER, "Cannot wait for a message on a sender socket."
         result = self.socket.poll(timeout, zmq.POLLIN)
         return result != 0
 

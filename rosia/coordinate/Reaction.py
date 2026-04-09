@@ -36,9 +36,7 @@ class Reaction:
             try:
                 delta = next(self.generator)
                 if not isinstance(delta, Time):
-                    raise TypeError(
-                        f"Expected yield of Time, got {type(delta).__name__}: {delta}"
-                    )
+                    raise TypeError(f"Expected yield of Time, got {type(delta).__name__}: {delta}")
                 target_time = self.timestamp + delta
                 return Reaction(self.generator, target_time, eager=self.eager)
             except StopIteration:
@@ -53,9 +51,7 @@ class Reaction:
                 if inspect.isgenerator(result):
                     try:
                         delta = next(result)
-                        return Reaction(
-                            result, self.timestamp + delta, eager=self.eager
-                        )
+                        return Reaction(result, self.timestamp + delta, eager=self.eager)
                     except StopIteration:
                         return None
             except TerminateReactionException:
@@ -78,9 +74,7 @@ class ReactionQueue:
         self._counter: int = 0
 
     def enqueue(self, reaction: Reaction, is_shutdown: bool = False) -> None:
-        heapq.heappush(
-            self._heap, (reaction.timestamp, self._counter, reaction, is_shutdown)
-        )
+        heapq.heappush(self._heap, (reaction.timestamp, self._counter, reaction, is_shutdown))
         self._counter += 1
 
     def dequeue(self) -> tuple[Optional[Reaction], bool]:

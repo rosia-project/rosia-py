@@ -20,15 +20,7 @@ import ale_py
 import rerun as rr
 import rerun.blueprint as rrb
 
-from rosia import (
-    InputPort,
-    OutputPort,
-    reaction,
-    Node,
-    Application,
-    request_shutdown,
-    log,
-)
+from rosia import InputPort, OutputPort, reaction, Node, Application, request_shutdown, log
 from rosia.config import RerunConfig
 from rosia.time import s
 
@@ -83,9 +75,7 @@ class Agent:
     def __init__(self):
         self.prev_theta = 0.0
 
-    def find_position(
-        self, frame: np.ndarray, color: np.ndarray
-    ) -> tuple[float, float] | None:
+    def find_position(self, frame: np.ndarray, color: np.ndarray) -> tuple[float, float] | None:
         """Find mean position of pixels matching color. Returns (row, col) or None."""
         mask = np.all(frame == color, axis=2)
         positions = np.argwhere(mask)
@@ -98,9 +88,7 @@ class Agent:
         frame = self.observation_in
         player_pos = self.find_position(frame, PLAYER_COLOR)
         cropped = frame[:200]
-        flag_pos = self.find_position(cropped, RED_FLAG_COLOR) or self.find_position(
-            cropped, BLUE_FLAG_COLOR
-        )
+        flag_pos = self.find_position(cropped, RED_FLAG_COLOR) or self.find_position(cropped, BLUE_FLAG_COLOR)
 
         if player_pos is None or flag_pos is None:
             # Can't see player or flag, go straight

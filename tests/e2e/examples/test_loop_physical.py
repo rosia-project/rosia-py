@@ -19,9 +19,7 @@ class Worker:
     def forward(self):
         yield 1 * s
         self.expected_int += 1
-        assert self.input_int == self.expected_int, (
-            f"Expected {self.expected_int} but received {self.input_int}"
-        )
+        assert self.input_int == self.expected_int, f"Expected {self.expected_int} but received {self.input_int}"
         log.info(f"Worker received: {self.input_int}")
         self.output_int(self.input_int)
         if self.input_int == 10:

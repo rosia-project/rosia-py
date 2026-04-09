@@ -145,9 +145,7 @@ def _load_icon(name: str) -> Optional[Image.Image]:
 # ── Port position computation ──────────────────────────────────────────────
 
 
-def _build_port_positions(
-    graph: "Graph", y_offset: float, icons: dict
-) -> Dict[str, Tuple[float, float]]:
+def _build_port_positions(graph: "Graph", y_offset: float, icons: dict) -> Dict[str, Tuple[float, float]]:
     """Build mapping from port ID to screen position (connection point)."""
     positions: Dict[str, Tuple[float, float]] = {}
 
@@ -320,16 +318,8 @@ def _draw_rect_node(
 
     # ── Reactions (chevrons) — centered between port label zones ──
     # Compute the center zone boundaries
-    left_zone_end = (
-        nx + NODE_PAD_H * SCALE + _max_port_label_width(node, True) + PORT_TEXT_PAD
-    )
-    right_zone_start = (
-        nx
-        + nw
-        - NODE_PAD_H * SCALE
-        - _max_port_label_width(node, False)
-        - PORT_TEXT_PAD
-    )
+    left_zone_end = nx + NODE_PAD_H * SCALE + _max_port_label_width(node, True) + PORT_TEXT_PAD
+    right_zone_start = nx + nw - NODE_PAD_H * SCALE - _max_port_label_width(node, False) - PORT_TEXT_PAD
     if not input_ports:
         left_zone_end = nx + NODE_PAD_H * SCALE
     if not output_ports:
@@ -337,9 +327,7 @@ def _draw_rect_node(
 
     reaction_screen_info = []
     for reaction in node.reactions:
-        info = _draw_reaction_in_zone(
-            draw, reaction, ny, left_zone_end, right_zone_start, fonts["reaction"]
-        )
+        info = _draw_reaction_in_zone(draw, reaction, ny, left_zone_end, right_zone_start, fonts["reaction"])
         reaction_screen_info.append((reaction, info))
 
     # ── Internal connections ──
@@ -432,9 +420,7 @@ def _draw_reaction_in_zone(
         (rx + pointiness, ry + rh),  # bottom-left
         (rx, ry + rh / 2),  # left point
     ]
-    draw.polygon(
-        points, fill=COLORS["reaction_fill"], outline=COLORS["reaction_border"]
-    )
+    draw.polygon(points, fill=COLORS["reaction_fill"], outline=COLORS["reaction_border"])
 
     # Draw reaction name centered in the chevron
     tx = rx + rw / 2 - text_w / 2
@@ -474,12 +460,7 @@ def _draw_internal_connections(
             if port_id in port_screen_y:
                 py = port_screen_y[port_id]
                 # Start from after the port label
-                start_x = (
-                    node_x
-                    + PORT_TEXT_PAD
-                    + _port_label_width(node, port_id)
-                    + 4 * SCALE
-                )
+                start_x = node_x + PORT_TEXT_PAD + _port_label_width(node, port_id) + 4 * SCALE
                 draw.line(
                     [(start_x, py), (react_left_x, react_left_y)],
                     fill=color,
@@ -490,13 +471,7 @@ def _draw_internal_connections(
         for port_id in reaction.effect_ports:
             if port_id in port_screen_y:
                 py = port_screen_y[port_id]
-                end_x = (
-                    node_x
-                    + node_w
-                    - PORT_TEXT_PAD
-                    - _port_label_width(node, port_id)
-                    - 4 * SCALE
-                )
+                end_x = node_x + node_w - PORT_TEXT_PAD - _port_label_width(node, port_id) - 4 * SCALE
                 draw.line(
                     [(react_right_x, react_right_y), (end_x, py)],
                     fill=color,
@@ -647,9 +622,7 @@ def _draw_edge(
 
     # Draw edge as rounded orthogonal path
     if len(points) >= 2:
-        _draw_rounded_polyline(
-            draw, points, COLORS["edge"], EDGE_WIDTH, radius=6 * SCALE
-        )
+        _draw_rounded_polyline(draw, points, COLORS["edge"], EDGE_WIDTH, radius=6 * SCALE)
 
     # Draw arrowhead at target
     if len(points) >= 2:
@@ -711,9 +684,7 @@ def _draw_rounded_polyline(
 
         # Draw arc at the bend
         if i < len(points) - 2:
-            _draw_bend_arc(
-                draw, points[i], points[i + 1], points[i + 2], fill, width, radius
-            )
+            _draw_bend_arc(draw, points[i], points[i + 1], points[i + 2], fill, width, radius)
 
 
 def _draw_bend_arc(

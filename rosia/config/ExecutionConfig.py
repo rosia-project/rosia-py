@@ -11,9 +11,7 @@ class RerunConfig(BaseModel):
 
     name: str = "rosia_rerun"
     recording_id: str = (
-        str(rr.get_recording_id())
-        if rr.get_recording_id() is not None
-        else datetime.now().strftime("%Y%m%d_%H%M%S")
+        str(rr.get_recording_id()) if rr.get_recording_id() is not None else datetime.now().strftime("%Y%m%d_%H%M%S")
     )
     blueprint: Optional[rrb.Blueprint] = None
     # Reuse the same recording id if it is already set

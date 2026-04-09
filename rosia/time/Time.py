@@ -38,9 +38,7 @@ class Time:
         raise ValueError("Cannot multiply Time by Time")
 
     def __rmul__(self, other) -> "Time":
-        assert isinstance(other, int) or isinstance(other, float), (
-            "You can only multiply Time by int or float"
-        )
+        assert isinstance(other, int) or isinstance(other, float), "You can only multiply Time by int or float"
         if self == never:
             return never
         if self == forever:
@@ -49,9 +47,7 @@ class Time:
         return Time(int(other * self.value))
 
     def __lmul__(self, other) -> "Time":
-        assert isinstance(other, int) or isinstance(other, float), (
-            "You can only multiply Time by int or float"
-        )
+        assert isinstance(other, int) or isinstance(other, float), "You can only multiply Time by int or float"
         assert other > 0, "You can only multiply Time by non-negative int or float"
         if self == never:
             return never
@@ -60,9 +56,7 @@ class Time:
         return Time(int(other * self.value))
 
     def __truediv__(self, other) -> "Time":
-        assert isinstance(other, int) or isinstance(other, float), (
-            "You can only divide Time by int or float"
-        )
+        assert isinstance(other, int) or isinstance(other, float), "You can only divide Time by int or float"
         assert other > 0, "You can only divide Time by non-negative int or float"
         if self == never:
             return never
@@ -71,9 +65,7 @@ class Time:
         return Time(int(self.value / other))
 
     def __floordiv__(self, other) -> "Time":
-        assert isinstance(other, int) or isinstance(other, float), (
-            "You can only floor divide Time by int or float"
-        )
+        assert isinstance(other, int) or isinstance(other, float), "You can only floor divide Time by int or float"
         assert other > 0, "You can only floor divide Time by non-negative int or float"
         if self == never:
             return never

@@ -1,12 +1,4 @@
-from rosia import (
-    InputPort,
-    OutputPort,
-    reaction,
-    Node,
-    Application,
-    request_shutdown,
-    log,
-)
+from rosia import InputPort, OutputPort, reaction, Node, Application, request_shutdown, log
 from rosia.time import Timer, Time, s
 
 
@@ -34,9 +26,7 @@ class Printer:
 
     @reaction([input_int1, input_int2])
     def print_message(self):
-        assert self.input_int1 == self.input_int2, (
-            "Input ports should have the same value"
-        )
+        assert self.input_int1 == self.input_int2, "Input ports should have the same value"
         log.info(f"Received: {self.input_int1} {self.input_int2}")
         self.receive_count += 1
         if self.receive_count >= 3:

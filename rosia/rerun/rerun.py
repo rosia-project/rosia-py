@@ -27,11 +27,7 @@ class RerunManager:
         )
 
     def send_blueprint(self) -> None:
-        rr.send_blueprint(
-            rrb.Blueprint(
-                rrb.Spatial2DView(origin="/diagram", background=[255, 255, 255])
-            )
-        )
+        rr.send_blueprint(rrb.Blueprint(rrb.Spatial2DView(origin="/diagram", background=[255, 255, 255])))
 
     def render_diagram(self, diagram: Image.Image) -> None:
         rr.log("/diagram", rr.Image(np.array(diagram)), static=True)

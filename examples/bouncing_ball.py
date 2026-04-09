@@ -19,15 +19,7 @@ import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
 
-from rosia import (
-    InputPort,
-    OutputPort,
-    reaction,
-    Node,
-    Application,
-    request_shutdown,
-    log,
-)
+from rosia import InputPort, OutputPort, reaction, Node, Application, request_shutdown, log
 from rosia.config import RerunConfig
 from rosia.time import Timer, Time, s, ms
 
@@ -133,12 +125,8 @@ if __name__ == "__main__":
 
     timer = app.create_node(Timer(interval=20 * ms, offset=0 * s))
 
-    sim1 = app.create_node(
-        BallSimulator(initial_position=(0.0, 0.0, 5.0), color=[255, 100, 50])
-    )
-    sim2 = app.create_node(
-        BallSimulator(initial_position=(0.0, 3.0, 5.0), color=[50, 150, 255], slow=True)
-    )
+    sim1 = app.create_node(BallSimulator(initial_position=(0.0, 0.0, 5.0), color=[255, 100, 50]))
+    sim2 = app.create_node(BallSimulator(initial_position=(0.0, 3.0, 5.0), color=[50, 150, 255], slow=True))
 
     renderer1 = app.create_node(Renderer())
     renderer2 = app.create_node(Renderer())
@@ -150,8 +138,4 @@ if __name__ == "__main__":
 
     app.diagram(save_to="bouncing_ball_diagram.png")
 
-    app.execute(
-        rerun_config=RerunConfig(
-            blueprint=rrb.Blueprint(rrb.Horizontal(rrb.Spatial3DView(origin="/")))
-        )
-    )
+    app.execute(rerun_config=RerunConfig(blueprint=rrb.Blueprint(rrb.Horizontal(rrb.Spatial3DView(origin="/")))))
