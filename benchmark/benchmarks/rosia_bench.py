@@ -4,14 +4,8 @@ import os
 import numpy as np
 from typing import List, Dict, Tuple
 
-from rosia import (
-    Node,
-    InputPort,
-    OutputPort,
-    reaction,
-    Application,
-    request_shutdown,
-)
+from rosia import Node, InputPort, OutputPort, reaction, Application, request_shutdown
+from rosia.time import ns
 
 
 @Node
@@ -51,6 +45,7 @@ class Sender:
         self.times: List[float] = []
         self.t0 = 0.0
         self.current_array = np.empty(0)
+        self.dt = 1 * ns
 
     def start(self):
         self.current_array = np.random.rand(self.array_sizes[0]).astype(np.float64)
@@ -58,7 +53,7 @@ class Sender:
             self.t0 = time.perf_counter()
         self.data_out((self.current_array, self.multiplier_value))
 
-    @reaction([result_in])
+    @reaction([result_in], eager=True)
     def on_result(self):
         if self.warmup:
             self.iteration += 1
@@ -67,6 +62,7 @@ class Sender:
                 self.iteration = 0
             if not self.warmup:
                 self.t0 = time.perf_counter()
+            yield self.dt
             self.data_out((self.current_array, self.multiplier_value))
             return
 
@@ -84,6 +80,7 @@ class Sender:
             self.size_idx += 1
             if self.size_idx >= len(self.array_sizes):
                 self.save_results()
+                request_shutdown()
                 return
             self.current_array = np.random.rand(self.array_sizes[self.size_idx]).astype(np.float64)
             self.warmup = True
@@ -92,6 +89,7 @@ class Sender:
 
         if not self.warmup:
             self.t0 = time.perf_counter()
+        yield self.dt
         self.data_out((self.current_array, self.multiplier_value))
 
     def save_results(self):
@@ -99,7 +97,6 @@ class Sender:
         with open(self.results_path, "w") as f:
             json.dump({str(k): v for k, v in self.all_results.items()}, f, indent=2)
         print(f"  Results saved to {self.results_path}")
-        request_shutdown()
 
 
 def benchmark_rosia(
