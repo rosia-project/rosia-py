@@ -350,6 +350,8 @@ class NodeRuntime:
             signal.SIGINT, signal.SIG_IGN
         )  # Ignore SIGINT in subprocesses. KeyboardInterrupt will be handled by the main process.
         self.start_logical_time = start_logical_time
+        self.logger.set_logical_time(Time(0))
+        self.logger.set_physical_time(get_physical_time())
         try:
             self.startup(start_logical_time)
 
