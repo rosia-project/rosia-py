@@ -3,7 +3,7 @@ from rosia.comms.Types import ClientType
 from rosia.comms.serializers import Serializer
 from rosia.comms.transports import Transport
 from rosia.config import ExecutionConfig
-from rosia.coordinate.Node import NodeRuntime
+from rosia.coordinate.Node import NodeRuntime, UpstreamInfo
 from rosia.coordinate.messages.base import (
     ShutdownMessage,
     NodeRequestShutdownMessage,
@@ -19,7 +19,7 @@ from rosia.frontend.Annotators import get_rosia_annotations, check_rosia_annotat
 import asyncio
 import logging
 import sys
-from rosia.time import never
+from rosia.time import Time, never
 from rosia.time.utils import get_physical_time
 from rosia.diagram import diagram
 from rosia.config import RerunConfig
@@ -129,6 +129,12 @@ class Application:
                 executor_controller.call("init_output_transports", self.node_endpoints)
                 for executor_controller in executor_controllers.values()
             )
+        )
+
+        self.logger.debug("Computing upstream topology for each node...")
+        upstream_per_node = self._compute_topologies()
+        await asyncio.gather(
+            *(executor_controllers[name].call("init_topology", upstream_per_node[name]) for name in self.node_infos)
         )
 
         self.logger.debug("Initializing node instances...")
@@ -269,6 +275,72 @@ class Application:
 
         if status_code != 0:
             sys.exit(status_code)
+
+    def _compute_topologies(self) -> Dict[str, Dict[str, UpstreamInfo]]:
+        """Compute, for every node, its transitive upstream dict.
+
+        Each ``upstream_per_node[node]`` is a ``{upstream_name: UpstreamInfo}``
+        mapping. For each upstream:
+
+        - ``min_delay`` is the smallest cumulative delay along any path from
+          that upstream to ``node``.
+        - ``active_port_count`` counts direct connections from the upstream
+          landing on ``node``'s input ports — used later for
+          ``NoMoreMessage`` bookkeeping. Transitive-only upstreams have 0.
+        """
+        nodes_by_name: Dict[str, NodeRuntime] = {name: info.node for name, info in self.node_infos.items()}
+
+        upstream_per_node: Dict[str, Dict[str, UpstreamInfo]] = {}
+
+        for self_name, self_node in nodes_by_name.items():
+            # Direct upstreams: one entry per upstream-node, recording min
+            # connection delay and the count of active connections.
+            upstream_nodes: Dict[str, UpstreamInfo] = {}
+            for input_port in self_node.input_port_connectors.values():
+                for upstream_port, is_physical, delay in input_port.upstream_ports:
+                    if is_physical:
+                        continue
+                    uname = upstream_port.owner.node_name
+                    if uname == self_name:
+                        continue
+                    d = delay if delay is not None else Time(0)
+                    info = upstream_nodes.get(uname)
+                    if info is None:
+                        upstream_nodes[uname] = UpstreamInfo(min_delay=d, active_port_count=1)
+                    else:
+                        if d < info.min_delay:
+                            info.min_delay = d
+                        info.active_port_count += 1
+
+            # Bellman-Ford-style relaxation: walk further upstream through
+            # each known node and tighten min_delay. Self is always excluded.
+            changed = True
+            while changed:
+                changed = False
+                for node_name, info in list(upstream_nodes.items()):
+                    node = nodes_by_name.get(node_name)
+                    if node is None:
+                        continue
+                    for input_port in node.input_port_connectors.values():
+                        for upstream_port, is_physical, delay in input_port.upstream_ports:
+                            if is_physical:
+                                continue
+                            uname = upstream_port.owner.node_name
+                            if uname == self_name:
+                                continue
+                            d = delay if delay is not None else Time(0)
+                            new_delay = info.min_delay + d
+                            existing = upstream_nodes.get(uname)
+                            if existing is None:
+                                upstream_nodes[uname] = UpstreamInfo(min_delay=new_delay)
+                                changed = True
+                            elif new_delay < existing.min_delay:
+                                existing.min_delay = new_delay
+                                changed = True
+
+            upstream_per_node[self_name] = upstream_nodes
+
+        return upstream_per_node
 
     def _force_shutdown(self, alive_nodes: set[str]) -> None:
         self.logger.debug(f"Force shutdown: sending ShutdownMessage to alive nodes: {alive_nodes}")

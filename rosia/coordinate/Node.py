@@ -10,7 +10,7 @@ from rosia.coordinate.messages.base import Message
 from rosia.frontend.Port import InputPort, OutputPort
 from rosia.utils import clone_class_detached, empty_function
 from rosia.frontend.Annotators import RosiaAnnotations, check_rosia_annotations
-from typing import Any, Dict, Optional, Set, Type, TypeVar, List
+from typing import Any, Dict, Optional, Type, TypeVar, List
 import traceback
 import sys
 from rosia.time import Time, forever
@@ -32,12 +32,43 @@ from rosia.coordinate.Events import (
 )
 from rosia.coordinate.Reaction import Reaction, ReactionQueue
 from rosia.time import s, never
+from dataclasses import dataclass, field
 import inspect
+
 from rosia.config import ExecutionConfig
 from rosia.logging import Logger
 from rosia.config import RerunConfig
 import signal
 from rosia.time.utils import get_physical_time
+
+
+@dataclass
+class UpstreamInfo:
+    """Per-upstream-node tracking used in STAT calculation and ENT propagation.
+
+    `min_delay` is the smallest cumulative logical-time delay along any path
+    from this upstream node to self (computed once at startup).
+
+    `ent` is the latest known Earliest Next Timestamp of this upstream — set
+    authoritatively by direct messages from the upstream itself, max-merged
+    from hearsay forwarded by other nodes.
+
+    `active_port_count` counts direct connections from this upstream to self
+    that have not yet sent `NoMoreMessage`. It is 0 for upstreams that are not
+    a direct upstream (transitive-only) — for those, `is_active` is managed by
+    ENT propagation (the upstream's own `forever` ENT once it is done).
+
+    `is_active` becomes False once a direct upstream has sent `NoMoreMessage`
+    on every one of its connections to self. STAT computation ignores inactive
+    direct upstreams. Transitive-only upstreams stay `is_active=True`; their
+    contribution drops out automatically when their ENT reaches `forever`.
+    """
+
+    min_delay: Time
+    ent: Time = field(default_factory=lambda: never)
+    active_port_count: int = 0
+    is_active: bool = True
+
 
 T = TypeVar("T")
 
@@ -73,14 +104,11 @@ class NodeRuntime:
         self.event_queue: EventQueue = EventQueue()
         self.reaction_queue: ReactionQueue = ReactionQueue()
 
-        # Direct external upstream nodes (excluding self). Drives STAT calculation.
-        self.upstream_nodes: Set[str] = set()
-        # For each upstream node, the minimum delay across all of its connections to this node.
-        self.upstream_min_delays: Dict[str, Time] = {}
-        # For each upstream node, count of active (non-physical) connections that haven't yet sent NoMoreMessage.
-        self.upstream_active_port_count: Dict[str, int] = {}
-        # Earliest next timestamp of each known node.
-        self.ENTs: Dict[str, Time] = {}
+        # All transitive upstream nodes (excluding self). Each entry holds the
+        # min path delay from that upstream to self, the latest known ENT, and
+        # NoMoreMessage bookkeeping. Populated by `init_topology` once the
+        # coordinator has computed the global graph.
+        self.upstream_nodes: Dict[str, UpstreamInfo] = {}
 
         self.init_ports()
 
@@ -141,85 +169,14 @@ class NodeRuntime:
         for _, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
             input_port.active_upstream_count = len(input_port.upstream_ports)
-        self._compute_upstream_topology()
         return {self.node_name: self.transport.endpoint}
 
-    def _compute_upstream_topology(self) -> None:
-        # Track per-direct-upstream connection counts for NoMoreMessage handling.
-        for input_port in self.input_port_connectors.values():
-            for upstream_port, is_physical, delay in input_port.upstream_ports:
-                if is_physical:
-                    continue
-                upstream_node = upstream_port.owner.node_name
-                if upstream_node == self.node_name:
-                    continue
-                self.upstream_active_port_count[upstream_node] = (
-                    self.upstream_active_port_count.get(upstream_node, 0) + 1
-                )
-        # Detect whether self is in a cycle: BFS downstream and see if we
-        # reach back to self. Nodes in a cycle use queue-only ENT to break
-        # the STAT-chase pattern; nodes not in a cycle use STAT-bound ENT to
-        # preserve chain synchronization through passive relays.
-        self.in_cycle: bool = False
-        visited: Set[str] = set()
-        stack: List["NodeRuntime"] = []
-        for output_port in self.output_port_connectors.values():
-            for downstream_port, is_physical, _ in output_port.downstream_ports:
-                if is_physical:
-                    continue
-                stack.append(downstream_port.owner)
-        while stack:
-            node = stack.pop()
-            if node.node_name == self.node_name:
-                self.in_cycle = True
-                break
-            if node.node_name in visited:
-                continue
-            visited.add(node.node_name)
-            for output_port in node.output_port_connectors.values():
-                for downstream_port, is_physical, _ in output_port.downstream_ports:
-                    if is_physical:
-                        continue
-                    stack.append(downstream_port.owner)
-        # Compute *transitive* upstream nodes and the minimum total delay along
-        # any path from each one to self. Self is excluded so cycles don't pin
-        # STAT to self's own ENT (which is what would cause the chase pattern).
-        # Bellman-Ford-style relaxation works because delays are non-negative.
-        node_objs: Dict[str, "NodeRuntime"] = {}
-        for input_port in self.input_port_connectors.values():
-            for upstream_port, is_physical, delay in input_port.upstream_ports:
-                if is_physical:
-                    continue
-                node_objs[upstream_port.owner.node_name] = upstream_port.owner
-                d = delay if delay is not None else Time(0)
-                uname = upstream_port.owner.node_name
-                if uname == self.node_name:
-                    continue
-                if uname not in self.upstream_min_delays or d < self.upstream_min_delays[uname]:
-                    self.upstream_min_delays[uname] = d
-
-        changed = True
-        while changed:
-            changed = False
-            for node_name, current_delay in list(self.upstream_min_delays.items()):
-                node = node_objs.get(node_name)
-                if node is None:
-                    continue
-                for input_port in node.input_port_connectors.values():
-                    for upstream_port, is_physical, delay in input_port.upstream_ports:
-                        if is_physical:
-                            continue
-                        uname = upstream_port.owner.node_name
-                        if uname == self.node_name:
-                            continue
-                        node_objs[uname] = upstream_port.owner
-                        d = delay if delay is not None else Time(0)
-                        new_delay = current_delay + d
-                        if uname not in self.upstream_min_delays or new_delay < self.upstream_min_delays[uname]:
-                            self.upstream_min_delays[uname] = new_delay
-                            changed = True
-
-        self.upstream_nodes = set(self.upstream_min_delays.keys())
+    def init_topology(self, upstream_nodes: Dict[str, UpstreamInfo]) -> None:
+        """Install the upstream topology computed by the coordinator. The
+        coordinator runs a single Bellman-Ford pass over the full graph and
+        sends each node its own per-upstream view, so we don't BFS the world
+        ourselves on every startup."""
+        self.upstream_nodes = upstream_nodes
 
     def init_output_transports(self, node_endpoints: Dict[str, str]) -> None:
         downstream_nodes: Dict[str, List[InputPortConnector[Any]]] = {}
@@ -292,17 +249,15 @@ class NodeRuntime:
                 self.transport.wait_for_message()
 
     def _compute_self_ENT(self) -> Time:
-        # ENT = earliest possible emit time. Includes:
-        #   - reaction queue peek (yield-scheduled work)
+        # ENT = earliest unprocessed timestamp in this node's queues:
         #   - event queue peek (incoming messages not yet handled)
-        #   - STAT (next external event arrival), iff this node is NOT in a
-        #     cycle. In a cycle, STAT depends recursively on self's own ENT
-        #     through the loop, which would cause STAT to chase forward by the
-        #     loop delay every round; restricting to the queue breaks that.
-        # Bounded below by logical_time so we never report a timestamp in the past.
+        #   - reaction queue peek (yield-scheduled work)
+        # Bounded below by logical_time so we never report a timestamp in the
+        # past. STAT is intentionally NOT a candidate: that would create a
+        # recursive STAT-chases-its-own-ENT loop in cycles, and the
+        # synchronization need it would otherwise cover (waiting for relay
+        # chains) is already provided by transitive upstream ENT propagation.
         candidates: List[Time] = []
-        if not self.in_cycle:
-            candidates.append(self.STAT)
         next_event_timestamp = self.event_queue.peek_data_time()
         if next_event_timestamp is not None:
             candidates.append(next_event_timestamp)
@@ -317,13 +272,12 @@ class NodeRuntime:
         return ent
 
     def _build_outgoing_ENTs(self) -> Dict[str, Time]:
-        ents = dict(self.ENTs)
+        ents: Dict[str, Time] = {name: info.ent for name, info in self.upstream_nodes.items()}
         ents[self.node_name] = self._compute_self_ENT()
         return ents
 
     def send_messages(self) -> None:
         ents_to_send = self._build_outgoing_ENTs()
-        self.ENTs[self.node_name] = ents_to_send[self.node_name]
         for output_port in self.output_port_objects.values():
             output_port._send(self.logical_time, ents_to_send)
 
@@ -450,13 +404,16 @@ class NodeRuntime:
                 input_port.active_upstream_count -= 1
                 from_output_port = input_port.get_upstream_port_by_name(message.from_port)
                 upstream_node = from_output_port.owner.node_name
-                if upstream_node in self.upstream_active_port_count:
-                    self.upstream_active_port_count[upstream_node] -= 1
-                    if self.upstream_active_port_count[upstream_node] <= 0:
-                        # Direct upstream fully done. Mark its ENT as forever so
-                        # it stops constraining our STAT, and so our downstream
-                        # also sees it as done via the propagated dict.
-                        self.ENTs[upstream_node] = forever
+                info = self.upstream_nodes.get(upstream_node)
+                if info is not None and info.active_port_count > 0:
+                    info.active_port_count -= 1
+                    if info.active_port_count == 0:
+                        # Direct upstream fully done. Mark inactive and pin its
+                        # ENT to forever so it stops constraining our STAT, and
+                        # so our downstream also sees it as done via the
+                        # propagated dict.
+                        info.is_active = False
+                        info.ent = forever
             elif isinstance(message, Message):
                 assert message.to_port in self.input_port_connectors, (
                     f"Message to_port {message.to_port} not found in node {self.node_name}"
@@ -468,16 +425,21 @@ class NodeRuntime:
                     for node_name, ent in message.ENTs.items():
                         if node_name == self.node_name:
                             continue
+                        info = self.upstream_nodes.get(node_name)
+                        if info is None:
+                            # Not in our upstream chain — irrelevant to our STAT
+                            # and never read by our downstream (their topology
+                            # would have us as the only path to this node only
+                            # if this node is also our upstream, which it isn't).
+                            continue
                         if node_name == sender_node:
                             # Sender is authoritative for its own ENT — overwrite
                             # so non-monotonic decreases (queue refills) propagate.
-                            self.ENTs[node_name] = ent
-                        else:
+                            info.ent = ent
+                        elif ent > info.ent:
                             # Hearsay about other nodes — only accept newer (higher)
                             # values; the authoritative sender will eventually correct.
-                            current = self.ENTs.get(node_name, never)
-                            if ent > current:
-                                self.ENTs[node_name] = ent
+                            info.ent = ent
                 self.update_STAT()
 
                 if message.timestamp is None:  # physical message
@@ -494,10 +456,8 @@ class NodeRuntime:
 
     def update_STAT(self) -> None:
         new_STAT: Time = forever
-        for upstream_node in self.upstream_nodes:
-            ent = self.ENTs.get(upstream_node, never)
-            delay = self.upstream_min_delays.get(upstream_node, Time(0))
-            new_STAT = min(new_STAT, ent + delay)
+        for info in self.upstream_nodes.values():
+            new_STAT = min(new_STAT, info.ent + info.min_delay)
         if new_STAT < self.STAT and self.STAT != forever and self.STAT != never:
             self.logger.warning(f"STAT decrease: {self.STAT} -> {new_STAT}")
         new_STAT = min(new_STAT, self.shutdown_time_barrier)
