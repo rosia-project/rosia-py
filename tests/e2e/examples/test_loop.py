@@ -37,8 +37,8 @@ def test_loop():
     worker = app.create_node(Worker())
     manager = app.create_node(Manager())
     worker.output_int >>= manager.input_int
-    manager.output_int >>= worker.input_int
-    app.execute()
+    manager.output_int.connect(worker.input_int, delay=1 * s)
+    app.execute(trace=True)
 
 
 if __name__ == "__main__":

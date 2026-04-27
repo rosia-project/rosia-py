@@ -1,4 +1,4 @@
-from typing import Any, Generic, Optional, TypeVar, TYPE_CHECKING
+from typing import Any, Dict, Generic, TypeVar, TYPE_CHECKING
 
 from rosia.time import Time
 
@@ -36,24 +36,22 @@ class OutputPortRuntimeObj(Generic[T]):
     ) -> None:
         self.node_runtime = node_runtime
         self.output_port_connector = output_port_connector
+        self.value: T | None = None
 
     # When the user sets the port, the value is passed to the coordinator to be sent to the downstream ports
     def __set__(self, value: T) -> None:
         raise TypeError("OutputPortRuntimeObj is immutable")
 
-    def set_STAT(self, first_timestamp: Time) -> None:
-        self.output_port_connector.set_STAT(first_timestamp)
-
     def __call__(
         self,
         value: T,
-        STAT: Optional[Time] = None,
     ) -> None:
-        timestamp = self.node_runtime.logical_time
-        if STAT is not None:
-            STAT += self.node_runtime.logical_time
-        elif STAT is None:
-            STAT = min(self.node_runtime.STAT, self.node_runtime.event_queue.peek_data_time())
-        if timestamp > STAT:
-            raise ValueError(f"Timestamp {timestamp} is greater than STAT {STAT}")
-        self.output_port_connector._set_value(value, timestamp, STAT)
+        if self.value is not None:
+            raise ValueError(
+                f"Output port {self.output_port_connector.name} written twice at same logical time {self.node_runtime.logical_time}"
+            )
+        self.value = value
+
+    def _send(self, timestamp: Time, ENTs: Dict[str, Time]) -> None:
+        self.output_port_connector.send(self.value, timestamp, ENTs)
+        self.value = None

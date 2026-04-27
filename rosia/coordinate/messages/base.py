@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Generic, Optional, TypeVar
+from typing import Dict, Generic, Optional, TypeVar
 
 from rosia.time import Time
 
@@ -15,13 +15,13 @@ class MessageBase(Generic[T]):
 
 @dataclass
 class Message(MessageBase[T]):
-    STAT: Optional[Time]
-    data: T
+    data: Optional[T]  # None means no updates, keep the current value
     from_port: str
     to_port: str
+    ENTs: Optional[Dict[str, Time]]  # None means physical message
 
     def __str__(self) -> str:
-        return f"Message(timestamp={self.timestamp}, STAT={self.STAT}, data={self.data}, from_port={self.from_port}, to_port={self.to_port})"
+        return f"Message(timestamp={self.timestamp}, ENTs={self.ENTs}, data={self.data}, from_port={self.from_port}, to_port={self.to_port})"
 
 
 @dataclass

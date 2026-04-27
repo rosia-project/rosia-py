@@ -13,10 +13,12 @@ class Counter:
         self.expected = 0
 
     def start(self):
+        print("Starting")
         self.counter_out(0)
 
     @reaction([counter_in])
     def increment(self):
+        print(f"received {self.counter_in}")
         assert self.counter_in == self.expected, f"Expected {self.expected} but got {self.counter_in}"
         self.expected += 1
         if self.counter_in >= 4:
@@ -31,7 +33,7 @@ def test_loop_logical():
     counter = app.create_node(Counter())
     counter.counter_out.connect(counter.counter_in, delay=1)
     app.diagram(save_to="loop.png")
-    app.execute()
+    app.execute(trace=True)
 
 
 if __name__ == "__main__":

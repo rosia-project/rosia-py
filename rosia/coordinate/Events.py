@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from functools import total_ordering
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import heapq
-from rosia.time import Time, forever
+from rosia.time import Time
 
 if TYPE_CHECKING:
     from rosia.frontend.Connection import InputPortConnector
@@ -87,12 +87,12 @@ class EventQueue:
             return None
         return self._heap[0].timestamp
 
-    def peek_data_time(self) -> Time:
+    def peek_data_time(self) -> Optional[Time]:
         """Earliest InputPortEvent timestamp, ignoring ShutdownEvents."""
         for event in self._heap:
             if isinstance(event, InputPortEvent):
                 return event.timestamp
-        return forever
+        return None
 
     def __bool__(self) -> bool:
         return len(self._heap) > 0

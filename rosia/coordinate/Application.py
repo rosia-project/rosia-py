@@ -1,10 +1,9 @@
-from typing import Dict, List, Optional, TypeVar, cast
+from typing import Dict, Optional, TypeVar, cast
 from rosia.comms.Types import ClientType
 from rosia.comms.serializers import Serializer
 from rosia.comms.transports import Transport
 from rosia.config import ExecutionConfig
 from rosia.coordinate.Node import NodeRuntime
-from rosia.frontend.Connection import OutputPortConnector
 from rosia.coordinate.messages.base import (
     ShutdownMessage,
     NodeRequestShutdownMessage,
@@ -135,59 +134,6 @@ class Application:
         self.logger.debug("Initializing node instances...")
         await asyncio.gather(
             *(executor_controller.call("init_node_instance") for executor_controller in executor_controllers.values())
-        )
-
-        self.logger.debug("Collecting output port safe to advance to values...")
-        output_port_safe_to_advance_to = {}
-        dstat_results = await asyncio.gather(
-            *(executor_controller.call("get_output_port_STAT") for executor_controller in executor_controllers.values())
-        )
-        for dstat in dstat_results:
-            output_port_safe_to_advance_to.update(dstat)
-
-        self.logger.debug("Propagating output port STATs...")
-
-        def propagate_output_STAT(port: OutputPortConnector, propagated: List[str]) -> None:
-            if port.name in propagated:
-                return
-            propagated.append(port.name)
-            if port.name in output_port_safe_to_advance_to:
-                port.set_STAT(
-                    min(
-                        port.safe_to_advance_to,
-                        output_port_safe_to_advance_to[port.name],
-                    )
-                )
-                output_port_safe_to_advance_to[port.name] = min(
-                    output_port_safe_to_advance_to[port.name],
-                    port.safe_to_advance_to,
-                )
-            for downstream_port, is_physical, delay in port.downstream_ports:
-                if is_physical:
-                    continue
-                downstream_port.update_safe_to_advance_to()
-                for affected_output_port in downstream_port.affected_output_ports:
-                    affected_output_port.set_STAT(
-                        min(
-                            affected_output_port.safe_to_advance_to,
-                            downstream_port.safe_to_advance_to,
-                        )
-                    )
-                    propagate_output_STAT(affected_output_port, propagated)
-
-        for name, node_info in self.node_infos.items():
-            for output_port in node_info.node.output_port_connectors.values():
-                propagate_output_STAT(output_port, propagated=[])
-
-        self.logger.debug("Updating ports STATs...")
-        await asyncio.gather(
-            *(
-                executor_controller.call(
-                    "set_output_port_STAT",
-                    output_port_safe_to_advance_to,
-                )
-                for executor_controller in executor_controllers.values()
-            )
         )
 
         self.logger.debug("Executing nodes...")

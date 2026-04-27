@@ -10,7 +10,7 @@ from rosia.coordinate.messages.base import Message
 from rosia.frontend.Port import InputPort, OutputPort
 from rosia.utils import clone_class_detached, empty_function
 from rosia.frontend.Annotators import RosiaAnnotations, check_rosia_annotations
-from typing import Any, Dict, Optional, Type, TypeVar, List
+from typing import Any, Dict, Optional, Set, Type, TypeVar, List
 import traceback
 import sys
 from rosia.time import Time, forever
@@ -67,11 +67,20 @@ class NodeRuntime:
         self.transport: TransportBase
 
         self.logical_time: Time = never
-        self.STAT: Time = forever
+        self.STAT: Time = never
         self.shutdown_time_barrier: Time = forever
 
         self.event_queue: EventQueue = EventQueue()
         self.reaction_queue: ReactionQueue = ReactionQueue()
+
+        # Direct external upstream nodes (excluding self). Drives STAT calculation.
+        self.upstream_nodes: Set[str] = set()
+        # For each upstream node, the minimum delay across all of its connections to this node.
+        self.upstream_min_delays: Dict[str, Time] = {}
+        # For each upstream node, count of active (non-physical) connections that haven't yet sent NoMoreMessage.
+        self.upstream_active_port_count: Dict[str, int] = {}
+        # Earliest next timestamp of each known node.
+        self.ENTs: Dict[str, Time] = {}
 
         self.init_ports()
 
@@ -82,6 +91,7 @@ class NodeRuntime:
     def init_ports(self) -> None:
         self.input_port_connectors: Dict[str, InputPortConnector[Any]] = {}
         self.output_port_connectors: Dict[str, OutputPortConnector[Any]] = {}
+        self.output_port_objects: Dict[str, OutputPortRuntimeObj[Any]] = {}
         for name, value in self.node_cls.__dict__.items():
             if isinstance(value, OutputPort):
                 output_port = OutputPortConnector(
@@ -91,6 +101,7 @@ class NodeRuntime:
                 output_port_runtime_object = OutputPortRuntimeObj(self, output_port)
                 port_name = f"{self.node_name}.{name}"
                 self.output_port_connectors[port_name] = output_port
+                self.output_port_objects[port_name] = output_port_runtime_object
 
                 self.__setattr__(name, output_port)
                 setattr(self.node_cls, name, output_port_runtime_object)
@@ -130,7 +141,85 @@ class NodeRuntime:
         for _, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
             input_port.active_upstream_count = len(input_port.upstream_ports)
+        self._compute_upstream_topology()
         return {self.node_name: self.transport.endpoint}
+
+    def _compute_upstream_topology(self) -> None:
+        # Track per-direct-upstream connection counts for NoMoreMessage handling.
+        for input_port in self.input_port_connectors.values():
+            for upstream_port, is_physical, delay in input_port.upstream_ports:
+                if is_physical:
+                    continue
+                upstream_node = upstream_port.owner.node_name
+                if upstream_node == self.node_name:
+                    continue
+                self.upstream_active_port_count[upstream_node] = (
+                    self.upstream_active_port_count.get(upstream_node, 0) + 1
+                )
+        # Detect whether self is in a cycle: BFS downstream and see if we
+        # reach back to self. Nodes in a cycle use queue-only ENT to break
+        # the STAT-chase pattern; nodes not in a cycle use STAT-bound ENT to
+        # preserve chain synchronization through passive relays.
+        self.in_cycle: bool = False
+        visited: Set[str] = set()
+        stack: List["NodeRuntime"] = []
+        for output_port in self.output_port_connectors.values():
+            for downstream_port, is_physical, _ in output_port.downstream_ports:
+                if is_physical:
+                    continue
+                stack.append(downstream_port.owner)
+        while stack:
+            node = stack.pop()
+            if node.node_name == self.node_name:
+                self.in_cycle = True
+                break
+            if node.node_name in visited:
+                continue
+            visited.add(node.node_name)
+            for output_port in node.output_port_connectors.values():
+                for downstream_port, is_physical, _ in output_port.downstream_ports:
+                    if is_physical:
+                        continue
+                    stack.append(downstream_port.owner)
+        # Compute *transitive* upstream nodes and the minimum total delay along
+        # any path from each one to self. Self is excluded so cycles don't pin
+        # STAT to self's own ENT (which is what would cause the chase pattern).
+        # Bellman-Ford-style relaxation works because delays are non-negative.
+        node_objs: Dict[str, "NodeRuntime"] = {}
+        for input_port in self.input_port_connectors.values():
+            for upstream_port, is_physical, delay in input_port.upstream_ports:
+                if is_physical:
+                    continue
+                node_objs[upstream_port.owner.node_name] = upstream_port.owner
+                d = delay if delay is not None else Time(0)
+                uname = upstream_port.owner.node_name
+                if uname == self.node_name:
+                    continue
+                if uname not in self.upstream_min_delays or d < self.upstream_min_delays[uname]:
+                    self.upstream_min_delays[uname] = d
+
+        changed = True
+        while changed:
+            changed = False
+            for node_name, current_delay in list(self.upstream_min_delays.items()):
+                node = node_objs.get(node_name)
+                if node is None:
+                    continue
+                for input_port in node.input_port_connectors.values():
+                    for upstream_port, is_physical, delay in input_port.upstream_ports:
+                        if is_physical:
+                            continue
+                        uname = upstream_port.owner.node_name
+                        if uname == self.node_name:
+                            continue
+                        node_objs[uname] = upstream_port.owner
+                        d = delay if delay is not None else Time(0)
+                        new_delay = current_delay + d
+                        if uname not in self.upstream_min_delays or new_delay < self.upstream_min_delays[uname]:
+                            self.upstream_min_delays[uname] = new_delay
+                            changed = True
+
+        self.upstream_nodes = set(self.upstream_min_delays.keys())
 
     def init_output_transports(self, node_endpoints: Dict[str, str]) -> None:
         downstream_nodes: Dict[str, List[InputPortConnector[Any]]] = {}
@@ -164,21 +253,14 @@ class NodeRuntime:
         self.coordinator_transport = Transport(ClientType.SENDER, Serializer, self.coordinator_transport_endpoint)
         self.node_instance.__init__(self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs)
 
-    def get_output_port_STAT(self) -> Dict[str, Time]:
-        output_port_safe_to_advance_to = {}
-        for output_port in self.output_port_connectors.values():
-            output_port_safe_to_advance_to[output_port.name] = output_port.safe_to_advance_to
-        return output_port_safe_to_advance_to
-
-    def set_output_port_STAT(self, output_port_to_sta: Dict[str, Time]) -> None:
-        for input_port in self.input_port_connectors.values():
-            for output_port, is_physical, delay in input_port.upstream_ports:
-                if output_port.name in output_port_to_sta.keys():
-                    output_port.set_STAT(output_port_to_sta[output_port.name])
-            input_port.update_safe_to_advance_to()
-
     def event_loop(self) -> None:
         self.logger.debug(f"Starting event loop for node {self.node_name}")
+        self.logger.debug(f"Logical time: {self.logger.logical_time}")
+        self.logger.debug(f"STAT: {self.STAT}")
+        # Baseline reflects what we'd send right now: if startup didn't send,
+        # we don't want the first iteration's eager check to broadcast a stale
+        # "forever" before we've received anything meaningful from upstream.
+        last_propagated_ENTs: Dict[str, Time] = self._build_outgoing_ENTs()
         while True:
             try:
                 self.drain_message_queue()
@@ -188,18 +270,70 @@ class NodeRuntime:
                 self.request_shutdown(0 * s, status_code=1)
             self.update_STAT()
 
+            # Eagerly propagate ENT updates after every drain so downstream
+            # knows about pending events in our queue before we process them.
+            # This is what enforces "all events at the same logical time are
+            # processed at the same logical time" across the network.
+            current_ENTs = self._build_outgoing_ENTs()
+            if current_ENTs != last_propagated_ENTs:
+                self.send_messages()
+                last_propagated_ENTs = self._build_outgoing_ENTs()
+
             has_work = (self.event_queue.peek_time() is not None and self.event_queue.peek_time() < self.STAT) or (
                 self.reaction_queue.peek_time() is not None and self.reaction_queue.peek_time() < self.STAT
             )
 
             if has_work:
                 self.advance_to_STAT()
+                last_propagated_ENTs = self._build_outgoing_ENTs()
             elif self.check_natural_shutdown():
                 return
             else:
                 self.transport.wait_for_message()
 
+    def _compute_self_ENT(self) -> Time:
+        # ENT = earliest possible emit time. Includes:
+        #   - reaction queue peek (yield-scheduled work)
+        #   - event queue peek (incoming messages not yet handled)
+        #   - STAT (next external event arrival), iff this node is NOT in a
+        #     cycle. In a cycle, STAT depends recursively on self's own ENT
+        #     through the loop, which would cause STAT to chase forward by the
+        #     loop delay every round; restricting to the queue breaks that.
+        # Bounded below by logical_time so we never report a timestamp in the past.
+        candidates: List[Time] = []
+        if not self.in_cycle:
+            candidates.append(self.STAT)
+        next_event_timestamp = self.event_queue.peek_data_time()
+        if next_event_timestamp is not None:
+            candidates.append(next_event_timestamp)
+        next_reaction_timestamp = self.reaction_queue.peek_time()
+        if next_reaction_timestamp is not None:
+            candidates.append(next_reaction_timestamp)
+        if not candidates:
+            return forever
+        ent = min(candidates)
+        if ent < self.logical_time:
+            ent = self.logical_time
+        return ent
+
+    def _build_outgoing_ENTs(self) -> Dict[str, Time]:
+        ents = dict(self.ENTs)
+        ents[self.node_name] = self._compute_self_ENT()
+        return ents
+
+    def send_messages(self) -> None:
+        ents_to_send = self._build_outgoing_ENTs()
+        self.ENTs[self.node_name] = ents_to_send[self.node_name]
+        for output_port in self.output_port_objects.values():
+            output_port._send(self.logical_time, ents_to_send)
+
     def advance_to_STAT(self) -> None:
+        # Track input-triggered reactions that have already been enqueued at
+        # each logical timestamp. This dedup spans iterations of this loop, so
+        # if more events at the same logical time arrive between drains the
+        # reaction still fires at most once. ShutdownEvent reactions are
+        # exempt (they're enqueued separately and must always run).
+        enqueued_funcs_per_time: Dict[Time, set] = {}
         while True:
             self.drain_message_queue()
             self.update_STAT()
@@ -224,38 +358,55 @@ class NodeRuntime:
             if advance_to_time < self.logical_time:
                 self.logger.warning(f"Logical time decrease: {self.logical_time} -> {advance_to_time}")
 
+            # Drop bookkeeping for timestamps strictly in the past.
+            for t in list(enqueued_funcs_per_time.keys()):
+                if t < advance_to_time:
+                    del enqueued_funcs_per_time[t]
+
             if self.logger._trace and advance_to_time != self.logical_time:
                 self.logger.debug(f"Logical time: {self.logical_time} -> {advance_to_time}")
             self.logical_time = advance_to_time
             self.logger.set_logical_time(advance_to_time)
             self.logger.set_physical_time(get_physical_time())
 
+            already_enqueued = enqueued_funcs_per_time.setdefault(advance_to_time, set())
+            # Collect trigger functions across all events at advance_to_time
+            # before enqueuing reactions, so each function fires at most once
+            # per logical timestamp even when its triggering inputs arrive in
+            # multiple message batches.
+            all_trigger_functions: List[Any] = []
             while self.event_queue.peek_time() is not None and self.event_queue.peek_time() == advance_to_time:
                 event = self.event_queue.pop()
                 assert event is not None, "Event is None"
                 if isinstance(event, InputPortEvent):
                     for input_port, value in event.input_port_values.items():
                         input_port.set_value_from_event(value)
-                    trigger_reactions = []
                     for input_port in event.input_port_values.keys():
                         for func in input_port.trigger_functions:
-                            if func not in trigger_reactions:
-                                trigger_reactions.append(func)
-                    for func in trigger_reactions:
-                        reaction = Reaction(func, advance_to_time, self.node_instance)
-                        self.reaction_queue.enqueue(reaction)
+                            if func not in all_trigger_functions:
+                                all_trigger_functions.append(func)
                 elif isinstance(event, ShutdownEvent):
                     reaction = Reaction(self.shutdown, advance_to_time)
                     self.reaction_queue.enqueue(reaction, is_shutdown=True)
                 else:
                     raise ValueError(f"Unexpected event type: {type(event)}")
+            for func in all_trigger_functions:
+                if func in already_enqueued:
+                    continue
+                reaction = Reaction(func, advance_to_time, self.node_instance)
+                self.reaction_queue.enqueue(reaction)
+                already_enqueued.add(func)
 
             self.execute_reactions(advance_to_time)
+            self.update_STAT()
+            self.send_messages()
 
     def execute_reactions(self, timestamp: Time) -> None:
         while self.reaction_queue.peek_time() is not None and self.reaction_queue.peek_time() == timestamp:
             reaction, is_shutdown = self.reaction_queue.dequeue()
             if is_shutdown:
+                # Flush any pending output and ENT updates before exiting.
+                self.send_messages()
                 self.shutdown()
                 break
             assert reaction is not None, "Reaction is None"
@@ -298,45 +449,61 @@ class NodeRuntime:
                 input_port = self.input_port_connectors[message.to_port]
                 input_port.active_upstream_count -= 1
                 from_output_port = input_port.get_upstream_port_by_name(message.from_port)
-                from_output_port.safe_to_advance_to = forever
-                input_port.update_safe_to_advance_to()
+                upstream_node = from_output_port.owner.node_name
+                if upstream_node in self.upstream_active_port_count:
+                    self.upstream_active_port_count[upstream_node] -= 1
+                    if self.upstream_active_port_count[upstream_node] <= 0:
+                        # Direct upstream fully done. Mark its ENT as forever so
+                        # it stops constraining our STAT, and so our downstream
+                        # also sees it as done via the propagated dict.
+                        self.ENTs[upstream_node] = forever
             elif isinstance(message, Message):
                 assert message.to_port in self.input_port_connectors, (
                     f"Message to_port {message.to_port} not found in node {self.node_name}"
                 )
                 input_port = self.input_port_connectors[message.to_port]
 
-                if message.STAT is not None:
-                    from_output_port_name = message.from_port
-                    assert from_output_port_name is not None, f"Message from_port {message.from_port} is None"
-                    from_output_port = input_port.get_upstream_port_by_name(from_output_port_name)
-                    from_output_port.safe_to_advance_to = max(
-                        from_output_port.safe_to_advance_to,
-                        message.STAT,
-                    )
-                    input_port.update_safe_to_advance_to()
+                if message.ENTs is not None:
+                    sender_node = message.from_port.split(".", 1)[0] if message.from_port else None
+                    for node_name, ent in message.ENTs.items():
+                        if node_name == self.node_name:
+                            continue
+                        if node_name == sender_node:
+                            # Sender is authoritative for its own ENT — overwrite
+                            # so non-monotonic decreases (queue refills) propagate.
+                            self.ENTs[node_name] = ent
+                        else:
+                            # Hearsay about other nodes — only accept newer (higher)
+                            # values; the authoritative sender will eventually correct.
+                            current = self.ENTs.get(node_name, never)
+                            if ent > current:
+                                self.ENTs[node_name] = ent
                 self.update_STAT()
 
                 if message.timestamp is None:  # physical message
-                    input_port.set_value_from_event(message.data)
-                    for trigger_function in input_port.trigger_functions:
-                        reaction = Reaction(trigger_function, self.logical_time, self.node_instance)
-                        self.reaction_queue.enqueue(reaction)
+                    if message.data is not None:
+                        input_port.set_value_from_event(message.data)
+                        for trigger_function in input_port.trigger_functions:
+                            reaction = Reaction(trigger_function, self.logical_time, self.node_instance)
+                            self.reaction_queue.enqueue(reaction)
                 else:
-                    self.event_queue.push_input_port_event(message.timestamp, input_port, message.data)
+                    if message.data is not None:
+                        self.event_queue.push_input_port_event(message.timestamp, input_port, message.data)
             else:
                 raise ValueError(f"Unexpected message type: [{type(message)}] {message}")
 
     def update_STAT(self) -> None:
-        min_safe_to_advance_to = forever
-        for input_port in self.input_port_connectors.values():
-            min_safe_to_advance_to = min(min_safe_to_advance_to, input_port.safe_to_advance_to)
-        if min_safe_to_advance_to < self.STAT and self.STAT != forever:
-            self.logger.warning(f"STAT decrease: {self.STAT} -> {min_safe_to_advance_to}")
-        min_safe_to_advance_to = min(min_safe_to_advance_to, self.shutdown_time_barrier)
-        if self.logger._trace and self.STAT != min_safe_to_advance_to:
-            self.logger.debug(f"STAT: {self.STAT} -> {min_safe_to_advance_to}")
-        self.STAT = min_safe_to_advance_to
+        new_STAT: Time = forever
+        for upstream_node in self.upstream_nodes:
+            ent = self.ENTs.get(upstream_node, never)
+            delay = self.upstream_min_delays.get(upstream_node, Time(0))
+            new_STAT = min(new_STAT, ent + delay)
+        if new_STAT < self.STAT and self.STAT != forever and self.STAT != never:
+            self.logger.warning(f"STAT decrease: {self.STAT} -> {new_STAT}")
+        new_STAT = min(new_STAT, self.shutdown_time_barrier)
+        if self.logger._trace and self.STAT != new_STAT:
+            self.logger.debug(f"STAT: {self.STAT} -> {new_STAT}")
+        self.STAT = new_STAT
 
     def execute(self, start_logical_time: Time) -> None:
         signal.signal(
@@ -388,6 +555,31 @@ class NodeRuntime:
             result = start_reaction.execute()
             if result is not None:
                 self.reaction_queue.enqueue(result)
+        self.update_STAT()
+        # Only broadcast initial state if start() actually produced something:
+        # an output value or a scheduled reaction. Otherwise downstream's view
+        # of our ENT stays at the default `never`, and our first eager send
+        # later (after our queue actually has events) carries real information.
+        # This prevents multi-input downstream from racing past pending events.
+        has_output = any(p.value is not None for p in self.output_port_objects.values())
+        has_reaction = self.reaction_queue.peek_time() is not None
+        if has_output or has_reaction:
+            self.send_messages()
+
+    def _send_no_more_to_downstream(self) -> None:
+        for output_port in self.output_port_connectors.values():
+            for downstream_port, is_physical, delay in output_port.downstream_ports:
+                if downstream_port.transport is not None:
+                    try:
+                        downstream_port.transport.send(
+                            NoMoreMessage(
+                                timestamp=None,
+                                from_port=output_port.name,
+                                to_port=downstream_port.name,
+                            )
+                        )
+                    except Exception:
+                        pass
 
     def check_natural_shutdown(self) -> bool:
         def all_done() -> bool:
@@ -399,16 +591,7 @@ class NodeRuntime:
             return True
 
         if not self.event_queue and not self.reaction_queue.has_pending() and all_done():
-            for output_port in self.output_port_connectors.values():
-                for downstream_port, is_physical, delay in output_port.downstream_ports:
-                    if downstream_port.transport is not None:
-                        downstream_port.transport.send(
-                            NoMoreMessage(
-                                timestamp=None,
-                                from_port=output_port.name,
-                                to_port=downstream_port.name,
-                            )
-                        )
+            self._send_no_more_to_downstream()
             return True
         return False
 
@@ -425,6 +608,7 @@ class NodeRuntime:
                     closed.add(id(downstream_port.transport))
 
     def shutdown(self, status_code: int = 0) -> None:
+        self._send_no_more_to_downstream()
         if hasattr(self.node_instance, "shutdown"):
             self.node_instance.shutdown()
         self.close_transports()

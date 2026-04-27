@@ -41,7 +41,6 @@ class Environment:
 
     def __init__(self, render: bool = True):
         self.render = render
-        self.observation.set_STAT(0 * s)
         self.dt = 1 * s / 15
         render_mode = "rgb_array" if self.render else None
         self.env = gym.make("ALE/Skiing-v5", render_mode=render_mode)
@@ -50,7 +49,7 @@ class Environment:
     def start(self):
         frame, _ = self.env.reset(seed=SEED)
         log.info("Game started")
-        self.observation(frame, STAT=self.dt)
+        self.observation(frame)
 
     @reaction([action_in])
     def on_action(self):
@@ -61,7 +60,7 @@ class Environment:
             request_shutdown()
         else:
             yield self.dt
-            self.observation(frame, STAT=self.dt)
+            self.observation(frame)
 
     def shutdown(self):
         self.env.close()

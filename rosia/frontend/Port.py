@@ -46,17 +46,12 @@ class OutputPort(Generic[T]):
     def __call__(
         self,
         value: T,
-        timestamp: Optional["Time"] = None,
-        STAT: Optional["Time"] = None,
     ) -> None:
         pass
 
     # this is just to make the compiler happy. This function will never be called. Actual code is in rosia.coordinate.Port
     def connect(self, other: T, delay: "Optional[Time] | int" = None) -> "OutputPort[T]":
         return self
-
-    def set_STAT(self, first_timestamp: "Time") -> None:
-        pass
 
     # >> shorthand for connect
     def __rshift__(self, other: T) -> "OutputPort[T]":

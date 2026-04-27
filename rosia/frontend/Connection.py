@@ -13,7 +13,7 @@ from typing import (
 from rosia.comms.Types import ClientType
 from rosia.comms.transports import TransportBase
 from rosia.coordinate.messages.base import Message
-from rosia.time import Time, forever, never
+from rosia.time import Time
 
 if TYPE_CHECKING:
     from rosia.coordinate.Node import NodeRuntime
@@ -48,7 +48,6 @@ class InputPortConnector(PortConnector[T]):
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"
         self.input_port_runtime_object = input_port_runtime_object
-        self.safe_to_advance_to: Time = forever
 
         self.port_type: ClientType
         self.transport: Optional[TransportBase] = None  # Only set for SENDER ports (downstream ports of output ports)
@@ -57,14 +56,6 @@ class InputPortConnector(PortConnector[T]):
 
     def __set__(self, args: List[Any], kwargs: Dict[str, Any]) -> None:
         raise TypeError("InputPort is immutable")
-
-    def update_safe_to_advance_to(self) -> None:
-        min_safe_to_advance_to = forever
-        for upstream_port, is_physical, delay in self.upstream_ports:
-            if is_physical:
-                continue
-            min_safe_to_advance_to = min(min_safe_to_advance_to, upstream_port.safe_to_advance_to)
-        self.safe_to_advance_to = min_safe_to_advance_to
 
     def get_upstream_port_by_name(self, name: str) -> "OutputPortConnector[T]":
         for upstream_port, is_physical, delay in self.upstream_ports:
@@ -88,8 +79,9 @@ class InputPortConnector(PortConnector[T]):
                 raise RuntimeError(f"Transport not set for sender port {self.name}")
             self.transport.send(msg)
         else:
-            self.value = msg.data
-            self.input_port_runtime_object._set_value(msg.data)
+            if msg.data is not None:
+                self.value = msg.data
+                self.input_port_runtime_object._set_value(msg.data)
 
     def set_value_from_event(self, value: T) -> None:
         self.value = value
@@ -110,51 +102,33 @@ class OutputPortConnector(PortConnector[T]):
         self.owner = owner
         self.name = f"{owner.node_name}.{name}"
         self.endpoint = None
-        self.safe_to_advance_to: Time = forever
-        self.last_sent_timestamp: Time = never
 
-    def set_STAT(self, first_timestamp: Time) -> None:
-        self.safe_to_advance_to = first_timestamp
-
-    def set_value(self, value: T) -> None:
-        self._set_value(value)
-
-    def _set_value(
+    def send(
         self,
-        value: T,
-        timestamp: Optional[Time] = None,
-        STAT: Optional[Time] = None,
+        value: T | None,
+        timestamp: Time,
+        ENTs: Dict[str, Time],
     ) -> None:
-        if timestamp is not None and timestamp <= self.last_sent_timestamp:
-            raise ValueError(
-                f"Timestamp {timestamp} is not greater than last sent timestamp {self.last_sent_timestamp}"
-            )
-        if timestamp is not None:
-            self.last_sent_timestamp = timestamp
         for downstream_port, is_physical, delay in self.downstream_ports:
             if not is_physical:
                 msg_timestamp = timestamp
-                msg_STAT = STAT
                 if delay is not None:
-                    if msg_timestamp is not None:
-                        msg_timestamp = msg_timestamp + delay
-                    if msg_STAT is not None:
-                        msg_STAT = msg_STAT + delay
+                    msg_timestamp = msg_timestamp + delay
                 downstream_port.set_value(
                     Message(
                         data=value,
                         timestamp=msg_timestamp,
-                        STAT=msg_STAT,
+                        ENTs=ENTs,
                         from_port=self.name,
                         to_port=downstream_port.name,
                     )
                 )
-            else:
+            elif value is not None:
                 downstream_port.set_value(
                     Message(
                         data=value,
                         timestamp=None,
-                        STAT=None,
+                        ENTs=None,
                         from_port=self.name,
                         to_port=downstream_port.name,
                     )

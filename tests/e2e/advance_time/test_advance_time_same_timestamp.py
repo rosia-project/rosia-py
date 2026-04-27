@@ -19,26 +19,16 @@ from rosia.time import ms, Time
 class SourceA:
     out = OutputPort[int]()
 
-    def __init__(self):
-        self.out.set_STAT(Time(0))
-
     def start(self):
-        t = Time(0)
-        dt = 200 * ms
-        self.out(1, STAT=t + dt)
+        self.out(1)
 
 
 @Node
 class SourceB:
     out = OutputPort[int]()
 
-    def __init__(self):
-        self.out.set_STAT(Time(0))
-
     def start(self):
-        t = Time(0)
-        dt = 200 * ms
-        self.out(2, STAT=t + dt)
+        self.out(2)
 
 
 @Node
