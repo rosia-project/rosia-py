@@ -7,7 +7,7 @@ sidebar_position: 6
 [Full source code](https://github.com/rosia-project/rosia/blob/main/examples/skiing.py)
 
 This tutorial shows how to drive a simulator with Rosia by building a closed loop between an Atari _Skiing_ environment and a heuristic agent that steers through the gates. It puts together everything from the previous tutorials: ports,
-[reactions](../handbook/model#reactions), [logical time](../handbook/logical_time), [STAT](../handbook/STAT), and [Rerun visualization](rerun).
+[reactions](../handbook/model#reactions), [logical time](../handbook/logical_time), and [Rerun visualization](rerun). [STAT](../handbook/STAT) is computed automatically from the topology and the `yield` in the environment's reaction.
 
 ## Pipeline
 
@@ -57,7 +57,6 @@ class Environment:
 
     def __init__(self, render: bool = True):
         self.render = render
-        self.observation.set_STAT(0 * s)
         self.dt = 1 * s / 15
         render_mode = "rgb_array" if self.render else None
         self.env = gym.make("ALE/Skiing-v5", render_mode=render_mode)
@@ -66,7 +65,7 @@ class Environment:
     def start(self):
         frame, _ = self.env.reset(seed=SEED)
         log.info("Game started")
-        self.observation(frame, STAT=self.dt)
+        self.observation(frame)
 
     @reaction([action_in])
     def on_action(self):
@@ -77,7 +76,7 @@ class Environment:
             request_shutdown()
         else:
             yield self.dt
-            self.observation(frame, STAT=self.dt)
+            self.observation(frame)
 
     def shutdown(self):
         self.env.close()
@@ -86,10 +85,10 @@ class Environment:
 A few things to note about `Environment`:
 
 - `self.dt = 1 * s / 15` is the simulator step duration — one Atari frame at 15 Hz.
-- `self.observation.set_STAT(0 * s)` declares that the very first frame is sent at logical time `0s`. Without this, the downstream agent would not know it is safe to advance.
-- In `start()`, the initial frame is sent with `STAT=self.dt`, telling the agent: "the next observation will be at most `dt` from now". The agent can then advance its logical time up to (but not past) `dt` while waiting.
-- In `on_action()`, the reaction uses `yield self.dt` to advance logical time by one frame, then sends the new observation with `STAT=self.dt`. This keeps the loop running at a steady 15 Hz in logical time, regardless of how fast the wall
-  clock is.
+- In `start()`, the initial frame is sent at logical time `0s`. There is no STAT to set: `start()` either yields (advertising a future emission) or returns; here it returns after the initial emission, and the next emission is scheduled by
+  `on_action`'s `yield`.
+- In `on_action()`, the reaction uses `yield self.dt` to pause for one frame in logical time, then sends the new observation. The yield itself is what tells the [STAT](../handbook/STAT) machinery "next emission at +dt"; downstream advances
+  accordingly.
 - When the episode ends, `request_shutdown()` is called from inside the reaction, which tears down the application.
 
 ```python
@@ -192,5 +191,5 @@ A single-process loop would also work for this toy example, but expressing it as
 ## Key points
 
 - Closed-loop simulators map naturally onto two reacting nodes connected in a cycle.
-- Use `set_STAT` and the `STAT=` argument on `output_port(...)` to advertise when the next message will arrive, so the downstream node can advance logical time safely.
+- A `yield <Time>` in a reaction advertises when the node will next produce a message; downstream nodes use that to advance their logical time safely. No explicit STAT API is needed.
 - Seeding both `env.reset(seed=...)` and `env.action_space.seed(...)` makes the run deterministic.

@@ -44,7 +44,8 @@ output_port.connect(input_port, delay=1)        # delay by one microstep
 output_port.connect(input_port, delay=3)        # delay by three microsteps
 ```
 
-The delay is added to both the message's timestamp and its STAT on the sending side, so the downstream input port receives and processes the message at `sender_logical_time + delay`.
+The delay is added to the message's timestamp on the sending side, so the downstream input port receives and processes the message at `sender_logical_time + delay`. The same delay is also folded into [STAT](STAT) calculations: a transitive
+upstream node reachable through a path with total delay $d$ contributes its ENT $+ d$ to the receiver's STAT.
 
 When `delay` is passed as an `int`, it is interpreted as a microstep count: `delay=N` is equivalent to `delay=Time(0, microstep=N)`. For non-microstep delays, pass a `Time` value (e.g. `5 * ms`).
 

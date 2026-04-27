@@ -22,3 +22,9 @@ serializers.
 ## Ports
 
 Each node can have several input ports and output ports. However, for performance reasons, all input ports share the same ZeroMQ PULL endpoint, and each output port has its own ZeroMQ PUSH endpoint.
+
+## Synchronization
+
+There is no central coordinator for logical-time advancement. Each node decides locally how far it can advance based on a `Dict[str, Time]` of [ENTs](../handbook/STAT) — the earliest next emission timestamp of every transitive upstream
+node. Each outgoing message carries this dict; receivers merge it into their own and recompute STAT. The transitive upstream set and the minimum delay along any path from each upstream are computed once at startup via a Bellman-Ford-style
+BFS, so STAT is just a `min` over those entries at runtime.

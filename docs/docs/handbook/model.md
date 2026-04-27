@@ -65,7 +65,8 @@ Key properties:
 
 - A reaction lists one or more **trigger ports**. It fires when **any** of them receives a message.
 - When triggered, the node's logical time advances to the timestamp of the triggering message. All port values reflect their state at that logical time.
-- Multiple messages arriving at the same logical time on different trigger ports of the same reaction cause **a single firing**, not one per port. This is how Rosia achieves automatic synchronization.
+- Multiple messages arriving at the same logical time on different trigger ports of the same reaction cause **a single firing**, not one per port. The runtime waits until all messages at that timestamp have arrived before firing — see
+  [STAT](STAT) for how that synchronization is enforced.
 - A reaction can use `yield <Time>` to pause and resume after a logical time interval. This turns the reaction into a generator that is re-scheduled at `current_time + delta`.
 
 ## Logical Time
