@@ -417,12 +417,13 @@ def _svg_edge(
 
     parts: List[str] = []
 
-    # Edge path with rounded corners
+    # Edge path with rounded corners. Physical connections render dashed.
     if len(points) >= 2:
         path_d = _rounded_polyline_path(points, radius=6 * SCALE)
+        dash_attr = f' stroke-dasharray="{6 * SCALE} {4 * SCALE}"' if edge.is_physical else ""
         parts.append(
             f'<path d="{path_d}" fill="none" stroke="{COLORS["edge"]}" '
-            f'stroke-width="{EDGE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'stroke-width="{EDGE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"{dash_attr}/>'
         )
 
     # Arrowhead

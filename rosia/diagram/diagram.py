@@ -69,6 +69,7 @@ class Edge:
     source_port: str
     target_port: str
     delay: "Optional[Time] | int" = None
+    is_physical: bool = False
     bend_points: List[Tuple[float, float]] = field(default_factory=list)
 
 
@@ -159,7 +160,14 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
         # Build edges from output→downstream connections
         for port_name, connector in runtime.output_port_connectors.items():
             for downstream, is_physical, delay in connector.downstream_ports:
-                graph.edges.append(Edge(source_port=port_name, target_port=downstream.name, delay=delay))
+                graph.edges.append(
+                    Edge(
+                        source_port=port_name,
+                        target_port=downstream.name,
+                        delay=delay,
+                        is_physical=is_physical,
+                    )
+                )
 
     return graph
 

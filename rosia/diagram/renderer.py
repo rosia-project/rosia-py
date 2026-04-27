@@ -621,9 +621,16 @@ def _draw_edge(
 
     points = _build_orthogonal_route(sx, sy, tx, ty, scaled_bends)
 
-    # Draw edge as rounded orthogonal path
+    # Draw edge as rounded orthogonal path. Physical connections render dashed.
     if len(points) >= 2:
-        _draw_rounded_polyline(draw, points, COLORS["edge"], EDGE_WIDTH, radius=6 * SCALE)
+        _draw_rounded_polyline(
+            draw,
+            points,
+            COLORS["edge"],
+            EDGE_WIDTH,
+            radius=6 * SCALE,
+            dashed=edge.is_physical,
+        )
 
     # Draw arrowhead at target
     if len(points) >= 2:
@@ -672,12 +679,17 @@ def _draw_rounded_polyline(
     fill: str,
     width: int,
     radius: float = 18,
+    dashed: bool = False,
 ) -> None:
-    """Draw a polyline with rounded corners at bend points using arcs."""
+    """Draw a polyline with rounded corners at bend points using arcs.
+
+    When ``dashed`` is True, every segment (including the bend arcs) is drawn
+    as a dash pattern instead of a continuous line.
+    """
     if len(points) < 2:
         return
     if len(points) == 2:
-        draw.line(points, fill=fill, width=width)
+        _draw_segment(draw, points[0], points[1], fill, width, dashed)
         return
 
     for i in range(len(points) - 1):
@@ -715,11 +727,49 @@ def _draw_rounded_polyline(
             else:  # vertical segment
                 y2 = y2 - r * (1 if y2 > y1 else -1)
 
-        draw.line([(x1, y1), (x2, y2)], fill=fill, width=width)
+        _draw_segment(draw, (x1, y1), (x2, y2), fill, width, dashed)
 
         # Draw arc at the bend
         if i < len(points) - 2:
-            _draw_bend_arc(draw, points[i], points[i + 1], points[i + 2], fill, width, radius)
+            _draw_bend_arc(draw, points[i], points[i + 1], points[i + 2], fill, width, radius, dashed=dashed)
+
+
+# Length of each dash and gap (in screen units) for physical (dashed) edges.
+DASH_LEN = 6 * SCALE
+DASH_GAP = 4 * SCALE
+
+
+def _draw_segment(
+    draw: ImageDraw.ImageDraw,
+    p1: Tuple[float, float],
+    p2: Tuple[float, float],
+    fill: str,
+    width: int,
+    dashed: bool,
+) -> None:
+    """Draw a straight line segment, optionally as a dash pattern."""
+    if not dashed:
+        draw.line([p1, p2], fill=fill, width=width)
+        return
+    x1, y1 = p1
+    x2, y2 = p2
+    dx = x2 - x1
+    dy = y2 - y1
+    length = (dx * dx + dy * dy) ** 0.5
+    if length < 1e-6:
+        return
+    ux = dx / length
+    uy = dy / length
+    period = DASH_LEN + DASH_GAP
+    pos = 0.0
+    while pos < length:
+        end = min(pos + DASH_LEN, length)
+        sx = x1 + ux * pos
+        sy = y1 + uy * pos
+        ex = x1 + ux * end
+        ey = y1 + uy * end
+        draw.line([(sx, sy), (ex, ey)], fill=fill, width=width)
+        pos += period
 
 
 def _draw_bend_arc(
@@ -730,6 +780,7 @@ def _draw_bend_arc(
     fill: str,
     width: int,
     radius: float,
+    dashed: bool = False,
 ) -> None:
     """Draw a rounded corner arc at point p2 between segments p1-p2 and p2-p3."""
     x1, y1 = p1
@@ -776,7 +827,11 @@ def _draw_bend_arc(
         arc_points.append((ax, ay))
 
     if len(arc_points) >= 2:
-        draw.line(arc_points, fill=fill, width=width)
+        if dashed:
+            for k in range(len(arc_points) - 1):
+                _draw_segment(draw, arc_points[k], arc_points[k + 1], fill, width, dashed=True)
+        else:
+            draw.line(arc_points, fill=fill, width=width)
 
 
 def _draw_arrowhead(
