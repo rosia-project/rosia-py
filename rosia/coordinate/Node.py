@@ -382,12 +382,12 @@ class NodeRuntime:
                     response_time = self.logical_time
                 else:
                     response_time = requested_time
-                self.shutdown_time_barrier = response_time + Time(1)
+                self.shutdown_time_barrier = response_time + Time(0, 1)
                 self.coordinator_transport.send(ApplicationShutdownResponseMessage(timestamp=response_time))
             elif isinstance(message, ShutdownMessage):
                 if message.timestamp is None:
                     raise ValueError("Shutdown message timestamp is None")
-                self.shutdown_time_barrier = message.timestamp + Time(1)
+                self.shutdown_time_barrier = message.timestamp + Time(0, 1)
                 self.update_STAT()
                 if message.timestamp < self.logical_time:
                     if message.timestamp != never:

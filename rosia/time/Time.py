@@ -101,14 +101,14 @@ class Time:
             return "never"
         if self.value == forever.value:
             return "forever"
-        if self.value >= s.value:
-            base = f"{self.value / s.value: .3f}s"
-        elif self.value >= ms.value:
-            base = f"{self.value / ms.value: .3f}ms"
-        elif self.value >= us.value:
-            base = f"{self.value / us.value: .3f}us"
+        if self.value % s.value == 0:
+            base = f"{self.value / s.value}s"
+        elif self.value % ms.value == 0:
+            base = f"{self.value / ms.value}ms"
+        elif self.value % us.value == 0:
+            base = f"{self.value / us.value}us"
         else:
-            base = f"{self.value / ns.value: .3f}ns"
+            base = f"{self.value / ns.value}ns"
         if self.microstep != 0:
             return f"{base}+{self.microstep}"
         return base
