@@ -90,6 +90,9 @@ def _compute_y_offset(graph: "Graph") -> float:
     for edge in graph.edges:
         for _, by in edge.bend_points:
             all_y.append(by)
+        # Detour-rewritten edges may have y-coords beyond the original bends.
+        for _, py in edge.full_route:
+            all_y.append(py)
     min_y = min(all_y, default=0)
     return max(0, -min_y + 20)
 
@@ -102,6 +105,9 @@ def _compute_canvas_size(graph: "Graph", y_offset: float) -> Tuple[int, int]:
         for bx, by in edge.bend_points:
             all_x.append(bx)
             all_y.append(by)
+        for px, py in edge.full_route:
+            all_x.append(px)
+            all_y.append(py)
 
     max_x = max(all_x, default=0)
     max_y = max(all_y, default=0)
@@ -115,8 +121,23 @@ def _compute_canvas_size(graph: "Graph", y_offset: float) -> Tuple[int, int]:
 
 
 def _load_fonts() -> Dict[str, Any]:
-    """Load fonts with fallback. Returns dict with 'header', 'port', 'reaction' keys."""
-    font_paths = ["/System/Library/Fonts/Helvetica.ttc", "arial.ttf"]
+    """Load fonts with fallback. Returns dict with 'header', 'port', 'reaction' keys.
+
+    The previous list only covered macOS (Helvetica.ttc) and Windows
+    (arial.ttf). On Linux both miss, and PIL silently falls back to a
+    built-in *bitmap* font that ignores the requested size, which renders
+    the diagram with unreadably small text. We probe the standard Debian /
+    Ubuntu locations next.
+    """
+    font_paths = [
+        "/System/Library/Fonts/Helvetica.ttc",  # macOS
+        "arial.ttf",  # Windows
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Debian/Ubuntu
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",  # Fedora/RHEL
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",  # Arch
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    ]
     for path in font_paths:
         try:
             return {
@@ -616,10 +637,15 @@ def _draw_edge(
     sx, sy = src
     tx, ty = tgt
 
-    # Scale bend points to screen coordinates
-    scaled_bends = [_to_screen(bx, by, y_offset) for bx, by in edge.bend_points]
-
-    points = _build_orthogonal_route(sx, sy, tx, ty, scaled_bends)
+    if edge.full_route:
+        # A post-processor (e.g. _avoid_node_body_crossings) already produced
+        # the orthogonal route in logical coords; use it verbatim instead of
+        # reconstructing from bends (which would put us back in the bug).
+        points = [_to_screen(px, py, y_offset) for px, py in edge.full_route]
+        points = _optimize_route(points)
+    else:
+        scaled_bends = [_to_screen(bx, by, y_offset) for bx, by in edge.bend_points]
+        points = _build_orthogonal_route(sx, sy, tx, ty, scaled_bends)
 
     # Draw edge as rounded orthogonal path. Physical connections render dashed.
     if len(points) >= 2:

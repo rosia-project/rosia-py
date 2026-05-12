@@ -71,6 +71,11 @@ class Edge:
     delay: "Optional[Time] | int" = None
     is_physical: bool = False
     bend_points: List[Tuple[float, float]] = field(default_factory=list)
+    # Full orthogonal route in logical coords, if a post-processor (e.g.
+    # ``_avoid_node_body_crossings``) has rewritten the edge to avoid drawing
+    # through node interiors. When set, the renderer uses these points
+    # directly instead of reconstructing them from ``bend_points``.
+    full_route: List[Tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -385,6 +390,7 @@ def layout_graph(graph: Graph) -> None:
 
     _reroute_self_loops(graph)
     _spread_vertical_segments(graph)
+    _avoid_node_body_crossings(graph)
 
 
 # Padding between a self-loop route and the node it wraps (logical units).
@@ -475,6 +481,306 @@ def _spread_vertical_segments(graph: Graph) -> None:
             new_bx = gap_left + (i + 1) * spacing
             bx_old, by_old = graph.edges[ei].bend_points[bi]
             graph.edges[ei].bend_points[bi] = (new_bx, by_old)
+
+
+# Margin (logical units) between a re-routed edge and the node body it skirts.
+NODE_AVOID_MARGIN = 20.0
+
+
+def _safe_v_x(
+    x_orig: float,
+    y_a: float,
+    y_b: float,
+    nodes: List[Node],
+    eps: float = 0.5,
+) -> float:
+    """Return an x near ``x_orig`` where a vertical from ``y_a`` to ``y_b``
+    doesn't pass through any node's interior.
+
+    Used by :func:`_avoid_node_body_crossings` when stitching in detour
+    bends: the V at the detour's bookend can otherwise sit inside the
+    source/target node's body if the H segment started or ended on that
+    node's port edge.
+    """
+    y_lo = min(y_a, y_b) + eps
+    y_hi = max(y_a, y_b) - eps
+    candidate = x_orig
+    for _ in range(10):  # bounded outward search
+        blocker: Optional[Node] = None
+        for n in nodes:
+            if not (n.x + eps < candidate < n.x + n.width - eps):
+                continue  # candidate already outside this node's x interior
+            if y_hi <= n.y or y_lo >= n.y + n.height:
+                continue  # V doesn't intersect node's y span
+            blocker = n
+            break
+        if blocker is None:
+            return candidate
+        left = blocker.x - NODE_AVOID_MARGIN
+        right = blocker.x + blocker.width + NODE_AVOID_MARGIN
+        candidate = left if abs(candidate - left) <= abs(candidate - right) else right
+    return candidate
+
+
+def _avoid_node_body_crossings(graph: Graph) -> None:
+    """Reroute edges whose orthogonal segments pass through node interiors.
+
+    ELK + ``_spread_vertical_segments`` can leave us with bend points that,
+    when expanded into a strict H/V/H/V/... route, place horizontal segments
+    at y-coordinates inside other nodes' bodies. The renderer then draws
+    those segments straight through the node, producing the visual overlap
+    that prompted this fix.
+
+    For each edge we:
+      1. Reconstruct the full orthogonal route from ``bend_points`` using the
+         same logic as :func:`rosia.diagram.renderer._build_orthogonal_route`.
+      2. Walk the segments. If a horizontal segment passes through a
+         non-source / non-target node interior, replace it with a detour
+         that goes above or below all blockers (whichever is closer).
+      3. If anything changed, store the result on ``edge.full_route`` so the
+         renderer skips bend reconstruction.
+    """
+    if not graph.edges:
+        return
+
+    port_pos: Dict[str, Tuple[float, float]] = {}
+    port_to_node: Dict[str, Node] = {}
+    for node in graph.nodes:
+        for port in node.ports:
+            x = node.x + (0 if port.is_input else node.width)
+            y = node.y + port.y
+            port_pos[port.id] = (x, y)
+            port_to_node[port.id] = node
+
+    for edge in graph.edges:
+        src = port_pos.get(edge.source_port)
+        tgt = port_pos.get(edge.target_port)
+        if src is None or tgt is None:
+            continue
+        src_node = port_to_node.get(edge.source_port)
+        tgt_node = port_to_node.get(edge.target_port)
+
+        route = _expand_route(src, tgt, edge.bend_points)
+        if not _route_has_node_overlap(route, graph.nodes):
+            continue  # ELK got it right — leave bend_points as-is
+
+        # First try a clean global wrap — a single detour y above (or below)
+        # *all* nodes, with verticals descending from the source/target ports
+        # to the wrap corridor. For typical back-edges this produces a clean
+        # 6-point route instead of the zig-zag the per-segment detour
+        # algorithm leaves.
+        wrap = _wrap_around_route(src, tgt, graph.nodes, src_node=src_node, tgt_node=tgt_node)
+        if wrap is not None and not _route_has_node_overlap(wrap, graph.nodes):
+            edge.full_route = wrap
+            continue
+
+        # Fallback: per-segment detour around each blocker.
+        new_route = _detour_route(route, graph.nodes, src_node, tgt_node)
+        if new_route != route:
+            edge.full_route = new_route
+
+
+def _expand_route(
+    src: Tuple[float, float],
+    tgt: Tuple[float, float],
+    bends: List[Tuple[float, float]],
+) -> List[Tuple[float, float]]:
+    """Reproduce the strictly-orthogonal route the renderer builds from bends.
+
+    Mirrors :func:`rosia.diagram.renderer._build_orthogonal_route` but in
+    logical coordinates so we can analyse + rewrite it before scaling.
+    """
+    sx, sy = src
+    tx, ty = tgt
+    if not bends:
+        if abs(sy - ty) <= 1:
+            return [(sx, sy), (tx, ty)]
+        mx = (sx + tx) / 2.0
+        return [(sx, sy), (mx, sy), (mx, ty), (tx, ty)]
+
+    points: List[Tuple[float, float]] = [(sx, sy)]
+    cur_y = sy
+    for i, (bx, by) in enumerate(bends):
+        is_last = i == len(bends) - 1
+        points.append((bx, cur_y))
+        cur_y = ty if is_last else by
+        points.append((bx, cur_y))
+    points.append((tx, cur_y))
+    return points
+
+
+def _route_has_node_overlap(
+    points: List[Tuple[float, float]],
+    nodes: List[Node],
+    eps: float = 0.5,
+) -> bool:
+    """True if any segment of ``points`` passes through a node *interior*."""
+    for i in range(len(points) - 1):
+        x1, y1 = points[i]
+        x2, y2 = points[i + 1]
+        for n in nodes:
+            if abs(y1 - y2) < eps:  # horizontal
+                if not (n.y + eps < y1 < n.y + n.height - eps):
+                    continue
+                lo, hi = (x1, x2) if x1 < x2 else (x2, x1)
+                if hi - eps <= n.x or lo + eps >= n.x + n.width:
+                    continue
+                inside_lo = max(lo, n.x + eps)
+                inside_hi = min(hi, n.x + n.width - eps)
+                if inside_hi - inside_lo > eps:
+                    return True
+            elif abs(x1 - x2) < eps:  # vertical
+                if not (n.x + eps < x1 < n.x + n.width - eps):
+                    continue
+                lo, hi = (y1, y2) if y1 < y2 else (y2, y1)
+                if hi - eps <= n.y or lo + eps >= n.y + n.height:
+                    continue
+                inside_lo = max(lo, n.y + eps)
+                inside_hi = min(hi, n.y + n.height - eps)
+                if inside_hi - inside_lo > eps:
+                    return True
+    return False
+
+
+def _wrap_around_route(
+    src: Tuple[float, float],
+    tgt: Tuple[float, float],
+    nodes: List[Node],
+    *,
+    src_node: "Optional[Node]" = None,
+    tgt_node: "Optional[Node]" = None,
+) -> Optional[List[Tuple[float, float]]]:
+    """Build a clean detour that wraps above or below *all* nodes.
+
+    Includes short horizontal stubs at each port so the edge exits/enters
+    the port body horizontally — otherwise a vertical drawn at exactly
+    ``node.x`` or ``node.x + node.width`` slides along the node's border.
+    Tried before the per-segment detour fallback so that long back-edges
+    don't accumulate zig-zag bends they don't need.
+    """
+    if not nodes:
+        return None
+    sx, sy = src
+    tx, ty = tgt
+    above = min(n.y for n in nodes) - NODE_AVOID_MARGIN
+    below = max(n.y + n.height for n in nodes) + NODE_AVOID_MARGIN
+    mid_y = (sy + ty) / 2.0
+
+    src_dir = _port_stub_direction(sx, src_node)
+    tgt_dir = _port_stub_direction(tx, tgt_node)
+    stub = NODE_AVOID_MARGIN
+    sx_off = sx + src_dir * stub
+    tx_off = tx + tgt_dir * stub
+
+    # Try the closer corridor first; fall back to the other if the first
+    # somehow still clips a node (rare — only if a node spans extreme y).
+    options = sorted([above, below], key=lambda y: abs(mid_y - y))
+    for clear_y in options:
+        route = [
+            (sx, sy),
+            (sx_off, sy),
+            (sx_off, clear_y),
+            (tx_off, clear_y),
+            (tx_off, ty),
+            (tx, ty),
+        ]
+        if not _route_has_node_overlap(route, nodes):
+            return route
+    return None
+
+
+def _port_stub_direction(port_x: float, node: "Optional[Node]") -> int:
+    """+1 if the port sits on the node's EAST edge, -1 for WEST.
+
+    Used so the wrap-around detour leaves an EAST output going right and
+    approaches a WEST input from the left. Defaults to +1 when the host
+    node isn't known.
+    """
+    if node is None:
+        return 1
+    center_x = node.x + node.width / 2.0
+    return 1 if port_x >= center_x else -1
+
+
+def _detour_route(
+    route: List[Tuple[float, float]],
+    nodes: List[Node],
+    src_node: "Optional[Node]",
+    tgt_node: "Optional[Node]",
+) -> List[Tuple[float, float]]:
+    """Insert detour points around any H segment that crosses a node body.
+
+    A segment is considered "crossing" if its y is *strictly* inside a
+    node's vertical span and its x-extent overlaps the node's x-extent by
+    more than ``EPS``. The endpoints' own source/target nodes are still
+    checked: a long horizontal at the port's y can pass through the host
+    node's body, which is the headline bug we fix here.
+    """
+    EPS = 0.5
+    out = list(route)
+
+    safety = 0
+    while safety < 64:
+        safety += 1
+        changed = False
+        i = 0
+        while i < len(out) - 1:
+            x1, y1 = out[i]
+            x2, y2 = out[i + 1]
+            if abs(y1 - y2) > EPS:
+                i += 1
+                continue
+            xlo = min(x1, x2)
+            xhi = max(x1, x2)
+
+            blockers: List[Node] = []
+            for n in nodes:
+                # An H segment "crosses" node n's interior if y is strictly
+                # inside its vertical band and its x-extent overlaps n's
+                # x-extent by more than EPS on each side.
+                if not (n.y + EPS < y1 < n.y + n.height - EPS):
+                    continue
+                if xhi - EPS <= n.x or xlo + EPS >= n.x + n.width:
+                    continue
+                # Allow exact-edge contact at a port boundary: e.g. a segment
+                # whose endpoint sits on n.x (WEST port) doesn't count as a
+                # crossing if the rest of the segment is OUTSIDE the node.
+                seg_inside_lo = max(xlo, n.x + EPS)
+                seg_inside_hi = min(xhi, n.x + n.width - EPS)
+                if seg_inside_hi - seg_inside_lo <= EPS:
+                    continue
+                blockers.append(n)
+
+            if not blockers:
+                i += 1
+                continue
+
+            above = min(b.y for b in blockers) - NODE_AVOID_MARGIN
+            below = max(b.y + b.height for b in blockers) + NODE_AVOID_MARGIN
+            detour_y = above if abs(y1 - above) <= abs(y1 - below) else below
+
+            # If x1 or x2 sits inside a node's x-extent, the inserted V
+            # would still draw through that node's body. Shift x1/x2
+            # outward to a clearance gap before stitching the detour in.
+            x1_safe = _safe_v_x(x1, y1, detour_y, nodes)
+            x2_safe = _safe_v_x(x2, y1, detour_y, nodes)
+
+            spliced: List[Tuple[float, float]] = []
+            if abs(x1_safe - x1) > EPS:
+                spliced.append((x1_safe, y1))
+            spliced.append((x1_safe, detour_y))
+            spliced.append((x2_safe, detour_y))
+            if abs(x2_safe - x2) > EPS:
+                spliced.append((x2_safe, y1))
+
+            out = out[: i + 1] + spliced + out[i + 1 :]
+            changed = True
+            i += 1 + len(spliced)  # skip past the inserted detour
+
+        if not changed:
+            break
+
+    return out
 
 
 def _find_gap(x: float, intervals: List[Tuple[float, float]]) -> int:
