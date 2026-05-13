@@ -11,6 +11,8 @@ from rosia.execute.Messages import (
     ExecutorExecuteResponseMessage,
 )
 
+_mp_context = multiprocessing.get_context("spawn")
+
 
 class Executor:
     def __init__(self, cls: Any, controller_endpoint: str):
@@ -61,7 +63,7 @@ class ExecutorController:
         startup_server = Server(ClientType.RECEIVER, Serializer)
         serializer = Serializer()
         serialized_cls = serializer.serialize(cls)
-        self.remote_process = multiprocessing.Process(
+        self.remote_process = _mp_context.Process(
             target=ExecutorProcess,
             args=(serialized_cls, startup_server.endpoint),
         )

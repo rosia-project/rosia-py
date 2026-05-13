@@ -112,6 +112,8 @@ def _compute_y_offset(graph: "Graph") -> float:
     for edge in graph.edges:
         for _, by in edge.bend_points:
             all_y.append(by)
+        for _, py in edge.full_route:
+            all_y.append(py)
     min_y = min(all_y, default=0)
     return max(0, -min_y + 20)
 
@@ -123,6 +125,9 @@ def _compute_canvas_size(graph: "Graph", y_offset: float) -> Tuple[int, int]:
         for bx, by in edge.bend_points:
             all_x.append(bx)
             all_y.append(by)
+        for px, py in edge.full_route:
+            all_x.append(px)
+            all_y.append(py)
     max_x = max(all_x, default=0)
     max_y = max(all_y, default=0)
     return int(max_x * SCALE + 2 * PADDING), int((max_y + y_offset + 20) * SCALE + 2 * PADDING)
@@ -412,8 +417,12 @@ def _svg_edge(
     sx, sy = src
     tx, ty = tgt
 
-    scaled_bends = [_to_screen(bx, by, y_offset) for bx, by in edge.bend_points]
-    points = _build_orthogonal_route(sx, sy, tx, ty, scaled_bends)
+    if edge.full_route:
+        points = [_to_screen(px, py, y_offset) for px, py in edge.full_route]
+        points = _optimize_route(points)
+    else:
+        scaled_bends = [_to_screen(bx, by, y_offset) for bx, by in edge.bend_points]
+        points = _build_orthogonal_route(sx, sy, tx, ty, scaled_bends)
 
     parts: List[str] = []
 
