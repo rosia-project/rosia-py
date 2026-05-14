@@ -51,7 +51,12 @@ class Application:
         self.coordinator_receiver_transport = Transport(ClientType.RECEIVER, Serializer)
         self.logger = Logger(self.__class__.__name__)
 
-    def create_node(self, node_cls: T, realtime: Optional[bool] = None) -> T:
+    def create_node(
+        self,
+        node_cls: T,
+        realtime: Optional[bool] = None,
+        lag_warn: Optional[Time] = None,
+    ) -> T:
         if realtime is None:
             realtime = self.realtime
         rosia_annotations = get_rosia_annotations(node_cls)
@@ -62,6 +67,7 @@ class Application:
             node_name=node_name,
             coordinator_transport_endpoint=self.coordinator_receiver_transport.endpoint,
             realtime=realtime,
+            lag_warn=lag_warn,
         )
         self.node_infos[node_name] = NodeRuntimeInfo(node=node_runtime, executor=None)
         self.logger.debug(f"Create node: {node_name}")

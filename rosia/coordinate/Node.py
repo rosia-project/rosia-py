@@ -83,6 +83,7 @@ class NodeRuntime:
         transport_cls: Type[TransportBase] = Transport,
         serializer_cls: Type[SerializerBase] = Serializer,
         realtime: bool = True,
+        lag_warn: Optional[Time] = None,
     ) -> None:
         check_rosia_annotations(rosia_annotations)
         node_cls = rosia_annotations["original_cls"]
@@ -93,6 +94,10 @@ class NodeRuntime:
         # semantics in real time (e.g. interacting with hardware on a fixed
         # cadence). Without it, reactions fire as fast as STAT allows.
         self.realtime = realtime
+        # When set, emit a warning each time
+        # ``lag = start_logical_time + logical_time - get_physical_time()``
+        # exceeds this threshold. None disables the check.
+        self.lag_warn: Optional[Time] = lag_warn
 
         self.node_cls = clone_class_detached(node_cls, f"{node_cls.__name__}NodeRuntime")
         self.node_original_init = rosia_annotations["original_init"]
@@ -423,6 +428,13 @@ class NodeRuntime:
             self.logical_time = advance_to_time
             self.logger.set_logical_time(advance_to_time)
             self.logger.set_physical_time(get_physical_time())
+
+            if self.lag_warn is not None:
+                lag = self.start_logical_time + self.logical_time - get_physical_time()
+                if lag > self.lag_warn:
+                    self.logger.warning(
+                        f"Lag {lag} exceeds lag_warn {self.lag_warn} at logical time {self.logical_time}"
+                    )
 
             already_enqueued = enqueued_funcs_per_time.setdefault(advance_to_time, set())
             # Collect trigger functions across all events at advance_to_time
