@@ -51,6 +51,19 @@ class Application:
         self.coordinator_receiver_transport = Transport(ClientType.RECEIVER, Serializer)
         self.logger = Logger(self.__class__.__name__)
 
+    def __del__(self) -> None:
+        # Defensive cleanup: ``execute`` already closes the coordinator
+        # transport on its normal exit path, but applications constructed
+        # for diagram/inspection only never reach that. Closing here keeps
+        # the ZMQ socket from emitting a ResourceWarning on interpreter
+        # teardown under Python 3.13's stricter unraisable detection.
+        try:
+            transport = getattr(self, "coordinator_receiver_transport", None)
+            if transport is not None:
+                transport.close()
+        except Exception:
+            pass
+
     def create_node(
         self,
         node_cls: T,
