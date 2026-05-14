@@ -43,6 +43,24 @@ class ZMQTransport(TransportBase):
         result = self.socket.poll(timeout, zmq.POLLIN)
         return result != 0
 
+    def wait_for_message_or_wake(self, wake_socket: "zmq.Socket", timeout: int = -1) -> bool:
+        """Block until either a message is available on the transport or
+        ``wake_socket`` is readable (used to interrupt the wait from another
+        thread). Drains any pending wake-up byte. Returns True iff a real
+        message is available on the transport socket."""
+        assert self.type == ClientType.RECEIVER, "Cannot wait for a message on a sender socket."
+        poller = zmq.Poller()
+        poller.register(self.socket, zmq.POLLIN)
+        poller.register(wake_socket, zmq.POLLIN)
+        events = dict(poller.poll(timeout))
+        if wake_socket in events:
+            try:
+                while True:
+                    wake_socket.recv(zmq.NOBLOCK)
+            except zmq.Again:
+                pass
+        return self.socket in events
+
     def close(self):
         self.socket.close()
 

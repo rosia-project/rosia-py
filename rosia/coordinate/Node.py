@@ -39,6 +39,7 @@ from rosia.config import ExecutionConfig
 from rosia.logging import Logger
 from rosia.config import RerunConfig
 import signal
+import zmq
 from rosia.time.utils import get_physical_time
 
 
@@ -104,6 +105,18 @@ class NodeRuntime:
         self.event_queue: EventQueue = EventQueue()
         self.reaction_queue: ReactionQueue = ReactionQueue()
 
+        # Methods decorated with @trigger on the node class. Populated in
+        # init_ports and bound to instance proxies in init_node_instance.
+        self.trigger_methods: Dict[str, Any] = {}
+
+        # Inproc PAIR sockets used by trigger threads to interrupt the
+        # blocking wait in event_loop. Both ends live in this process; the
+        # receiver is polled alongside the transport socket, the sender is
+        # called from any thread that needs to wake the loop. Created in
+        # init_remote so they share the per-node zmq.Context already in use.
+        self._wake_receiver: Optional[zmq.Socket] = None
+        self._wake_sender: Optional[zmq.Socket] = None
+
         # All transitive upstream nodes (excluding self). Each entry holds the
         # min path delay from that upstream to self, the latest known ENT, and
         # NoMoreMessage bookkeeping. Populated by `init_topology` once the
@@ -158,6 +171,13 @@ class NodeRuntime:
                 self.__setattr__(name, input_port)
                 setattr(self.node_cls, name, input_port_runtime_object)
 
+        # Discover methods marked with @trigger. We keep the raw function;
+        # the instance attribute is rewritten to a thread-safe scheduling
+        # proxy in init_node_instance once we have the bound node instance.
+        for name, value in self.node_cls.__dict__.items():
+            if callable(value) and getattr(value, "_rosia_is_trigger", False):
+                self.trigger_methods[name] = value
+
     def init_remote(self, execution_config: ExecutionConfig, rerun_config: Optional[RerunConfig]) -> Dict[str, str]:
         self.execution_config = execution_config
         rosia.logger.set_target(self.logger)  # type: ignore # overwrite the global logger
@@ -169,7 +189,25 @@ class NodeRuntime:
         for _, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
             input_port.active_upstream_count = len(input_port.upstream_ports)
+        if self.trigger_methods:
+            self._setup_wake_socket()
         return {self.node_name: self.transport.endpoint}
+
+    def _setup_wake_socket(self) -> None:
+        """Create an inproc PAIR (receiver bound, sender connected) used by
+        @trigger callers on other threads to wake event_loop's blocking
+        wait. Sender is held by ``_wake_event_loop`` and is safe to call
+        from arbitrary threads because each call is a single ``send``."""
+        context = zmq.Context.instance()
+        endpoint = f"inproc://rosia-wake-{self.node_name}-{id(self)}"
+        self._wake_receiver = context.socket(zmq.PAIR)
+        self._wake_receiver.bind(endpoint)
+        self._wake_sender = context.socket(zmq.PAIR)
+        self._wake_sender.connect(endpoint)
+
+    def _wake_event_loop(self) -> None:
+        if self._wake_sender is not None:
+            self._wake_sender.send(b"\x00")
 
     def init_topology(self, upstream_nodes: Dict[str, UpstreamInfo]) -> None:
         """Install the upstream topology computed by the coordinator. The
@@ -209,6 +247,23 @@ class NodeRuntime:
         rosia.node_runtime_instance = self
         self.coordinator_transport = Transport(ClientType.SENDER, Serializer, self.coordinator_transport_endpoint)
         self.node_instance.__init__(self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs)
+        self._install_trigger_proxies()
+
+    def _install_trigger_proxies(self) -> None:
+        """Replace each @trigger method on the node *instance* with a
+        thread-safe scheduling proxy. We do this after the user's __init__
+        runs so users can't accidentally shadow the proxy."""
+        for name, func in self.trigger_methods.items():
+            setattr(self.node_instance, name, self._make_trigger_proxy(func))
+
+    def _make_trigger_proxy(self, func: Any):
+        def _trigger(*args: Any, **kwargs: Any) -> None:
+            t = get_physical_time() - self.start_logical_time
+            reaction = Reaction(func, t, self.node_instance, *args, **kwargs)
+            self.reaction_queue.enqueue(reaction)
+            self._wake_event_loop()
+
+        return _trigger
 
     def event_loop(self) -> None:
         self.logger.debug(f"Starting event loop for node {self.node_name}")
@@ -246,7 +301,10 @@ class NodeRuntime:
             elif self.check_natural_shutdown():
                 return
             else:
-                self.transport.wait_for_message()
+                if self._wake_receiver is not None:
+                    self.transport.wait_for_message_or_wake(self._wake_receiver)
+                else:
+                    self.transport.wait_for_message()
 
     def _compute_self_ENT(self) -> Time:
         # ENT = earliest unprocessed timestamp in this node's queues:
@@ -550,6 +608,12 @@ class NodeRuntime:
                 return True
             return True
 
+        # Nodes that expose @trigger methods can produce work asynchronously
+        # from another thread, so an empty-queues snapshot doesn't mean
+        # "done". Stay alive until request_shutdown.
+        if self.trigger_methods:
+            return False
+
         if not self.event_queue and not self.reaction_queue.has_pending() and all_done():
             self._send_no_more_to_downstream()
             return True
@@ -560,6 +624,12 @@ class NodeRuntime:
             self.transport.close()
         if hasattr(self, "coordinator_transport"):
             self.coordinator_transport.close()
+        if self._wake_sender is not None:
+            self._wake_sender.close()
+            self._wake_sender = None
+        if self._wake_receiver is not None:
+            self._wake_receiver.close()
+            self._wake_receiver = None
         closed: set[int] = set()
         for output_port in self.output_port_connectors.values():
             for downstream_port, is_physical, delay in output_port.downstream_ports:

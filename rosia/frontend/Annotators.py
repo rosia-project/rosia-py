@@ -82,6 +82,23 @@ def reaction(triggers: List[InputPort]) -> Callable[[Callable], Callable]:
     return decorator
 
 
+def trigger(func: Callable) -> Callable:
+    """Mark a method as a physical action.
+
+    The decorated method becomes callable from any thread. Calling it
+    schedules the body as a reaction in the owning node's reaction queue
+    with ``timestamp = get_physical_time() - start_physical_time``.
+
+    Triggers do not propagate ENT and do not bound STAT; downstream nodes
+    may have already advanced past the trigger's logical timestamp by the
+    time their inputs arrive. Use ``//=`` (physical connections) downstream
+    of a ``@trigger`` to avoid logical-time violations.
+    """
+    func._rosia_is_trigger = True  # type: ignore[attr-defined]
+    func._rosia_affected_output_port_names = analyze_output_ports(func)  # type: ignore[attr-defined]
+    return func
+
+
 def Node(cls: Type[T]) -> Type[T]:
     original_init = get_class_effective_init(cls)
     _rosia_annotations = RosiaAnnotations(original_init=original_init, original_cls=cls, init_args=None)

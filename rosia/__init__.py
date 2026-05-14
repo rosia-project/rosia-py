@@ -1,5 +1,6 @@
 from rosia.frontend import (
     reaction as reaction,
+    trigger as trigger,
     Node as Node,
     InputPort as InputPort,
     OutputPort as OutputPort,
