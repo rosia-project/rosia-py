@@ -37,6 +37,14 @@ class TransportBase(ABC):
             True if a message is available, False if timed out.
         """
 
+    def wait_for_message_or_wake(self, wake_socket: Any, timeout: int = -1) -> bool:
+        """Optional: wait for either a message or a wake-source readable.
+
+        Transports that support multi-source waiting override this; the
+        default falls back to a plain ``wait_for_message`` and ignores the
+        wake source. Returns True iff a transport message is available."""
+        return self.wait_for_message(timeout=timeout)
+
     @abstractmethod
     def close(self):
         """Close the transport."""

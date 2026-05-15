@@ -39,6 +39,7 @@ from rosia.config import ExecutionConfig
 from rosia.logging import Logger
 from rosia.config import RerunConfig
 import signal
+import zmq
 from rosia.time.utils import get_physical_time
 
 
@@ -81,10 +82,22 @@ class NodeRuntime:
         coordinator_transport_endpoint: str,
         transport_cls: Type[TransportBase] = Transport,
         serializer_cls: Type[SerializerBase] = Serializer,
+        realtime: bool = True,
+        lag_warn: Optional[Time] = None,
     ) -> None:
         check_rosia_annotations(rosia_annotations)
         node_cls = rosia_annotations["original_cls"]
         self.coordinator_transport_endpoint = coordinator_transport_endpoint
+        # When True, the event loop waits until wall-clock time reaches
+        # ``start_logical_time + next_reaction_timestamp`` before firing each
+        # reaction. Required for any node that needs to honor logical-time
+        # semantics in real time (e.g. interacting with hardware on a fixed
+        # cadence). Without it, reactions fire as fast as STAT allows.
+        self.realtime = realtime
+        # When set, emit a warning each time
+        # ``lag = start_logical_time + logical_time - get_physical_time()``
+        # exceeds this threshold. None disables the check.
+        self.lag_warn: Optional[Time] = lag_warn
 
         self.node_cls = clone_class_detached(node_cls, f"{node_cls.__name__}NodeRuntime")
         self.node_original_init = rosia_annotations["original_init"]
@@ -103,6 +116,18 @@ class NodeRuntime:
 
         self.event_queue: EventQueue = EventQueue()
         self.reaction_queue: ReactionQueue = ReactionQueue()
+
+        # Methods decorated with @trigger on the node class. Populated in
+        # init_ports and bound to instance proxies in init_node_instance.
+        self.trigger_methods: Dict[str, Any] = {}
+
+        # Inproc PAIR sockets used by trigger threads to interrupt the
+        # blocking wait in event_loop. Both ends live in this process; the
+        # receiver is polled alongside the transport socket, the sender is
+        # called from any thread that needs to wake the loop. Created in
+        # init_remote so they share the per-node zmq.Context already in use.
+        self._wake_receiver: Optional[zmq.Socket] = None
+        self._wake_sender: Optional[zmq.Socket] = None
 
         # All transitive upstream nodes (excluding self). Each entry holds the
         # min path delay from that upstream to self, the latest known ENT, and
@@ -158,6 +183,13 @@ class NodeRuntime:
                 self.__setattr__(name, input_port)
                 setattr(self.node_cls, name, input_port_runtime_object)
 
+        # Discover methods marked with @trigger. We keep the raw function;
+        # the instance attribute is rewritten to a thread-safe scheduling
+        # proxy in init_node_instance once we have the bound node instance.
+        for name, value in self.node_cls.__dict__.items():
+            if callable(value) and getattr(value, "_rosia_is_trigger", False):
+                self.trigger_methods[name] = value
+
     def init_remote(self, execution_config: ExecutionConfig, rerun_config: Optional[RerunConfig]) -> Dict[str, str]:
         self.execution_config = execution_config
         rosia.logger.set_target(self.logger)  # type: ignore # overwrite the global logger
@@ -169,7 +201,57 @@ class NodeRuntime:
         for _, input_port in self.input_port_connectors.items():
             input_port.port_type = ClientType.RECEIVER
             input_port.active_upstream_count = len(input_port.upstream_ports)
+        if self.trigger_methods:
+            self._setup_wake_socket()
         return {self.node_name: self.transport.endpoint}
+
+    def _setup_wake_socket(self) -> None:
+        """Create an inproc PAIR (receiver bound, sender connected) used by
+        @trigger callers on other threads to wake event_loop's blocking
+        wait. Sender is held by ``_wake_event_loop`` and is safe to call
+        from arbitrary threads because each call is a single ``send``."""
+        context = zmq.Context.instance()
+        endpoint = f"inproc://rosia-wake-{self.node_name}-{id(self)}"
+        receiver = context.socket(zmq.PAIR)
+        receiver.bind(endpoint)
+        sender = context.socket(zmq.PAIR)
+        sender.connect(endpoint)
+        self._wake_receiver = receiver
+        self._wake_sender = sender
+
+    def _wake_event_loop(self) -> None:
+        if self._wake_sender is not None:
+            self._wake_sender.send(b"\x00")
+
+    def _blocking_wait(self, timeout_ms: int = -1) -> None:
+        """Unified blocking wait for the event loop. Returns when any of:
+        a transport message arrives, a wake byte arrives (trigger thread),
+        or the timeout expires. The caller is expected to re-evaluate the
+        loop state after this returns; this method makes no promise about
+        the reason it returned."""
+        if self._wake_receiver is not None:
+            self.transport.wait_for_message_or_wake(self._wake_receiver, timeout=timeout_ms)
+        else:
+            self.transport.wait_for_message(timeout=timeout_ms)
+
+    def _wait_for_realtime(self, advance_to_time: Time) -> bool:
+        """Block until physical time reaches the wall-clock equivalent of
+        ``advance_to_time`` (i.e. ``start_logical_time + advance_to_time``).
+
+        Returns True if we waited (the caller should re-evaluate the loop —
+        a trigger or new message may have introduced an earlier-timestamp
+        reaction). Returns False if no wait was needed."""
+        target_physical_time = self.start_logical_time + advance_to_time
+        delta = target_physical_time - get_physical_time()
+        if delta <= Time(0):
+            return False
+        # ZMQ poll uses millisecond resolution. For sub-ms remainders we
+        # accept the slop; matches the existing Timer's nanosleep slop in
+        # practice. Always wait at least 1 ms so very small deltas still
+        # round to a meaningful poll.
+        delta_ms = max(1, int(delta.to_unix_time() * 1000))
+        self._blocking_wait(timeout_ms=delta_ms)
+        return True
 
     def init_topology(self, upstream_nodes: Dict[str, UpstreamInfo]) -> None:
         """Install the upstream topology computed by the coordinator. The
@@ -209,6 +291,23 @@ class NodeRuntime:
         rosia.node_runtime_instance = self
         self.coordinator_transport = Transport(ClientType.SENDER, Serializer, self.coordinator_transport_endpoint)
         self.node_instance.__init__(self.node_instance, *self.node_init_args.args, **self.node_init_args.kwargs)
+        self._install_trigger_proxies()
+
+    def _install_trigger_proxies(self) -> None:
+        """Replace each @trigger method on the node *instance* with a
+        thread-safe scheduling proxy. We do this after the user's __init__
+        runs so users can't accidentally shadow the proxy."""
+        for name, func in self.trigger_methods.items():
+            setattr(self.node_instance, name, self._make_trigger_proxy(func))
+
+    def _make_trigger_proxy(self, func: Any):
+        def _trigger(*args: Any, **kwargs: Any) -> None:
+            t = get_physical_time() - self.start_logical_time
+            reaction = Reaction(func, t, self.node_instance, *args, **kwargs)
+            self.reaction_queue.enqueue(reaction)
+            self._wake_event_loop()
+
+        return _trigger
 
     def event_loop(self) -> None:
         self.logger.debug(f"Starting event loop for node {self.node_name}")
@@ -246,7 +345,7 @@ class NodeRuntime:
             elif self.check_natural_shutdown():
                 return
             else:
-                self.transport.wait_for_message()
+                self._blocking_wait()
 
     def _compute_self_ENT(self) -> Time:
         # ENT = earliest unprocessed timestamp in this node's queues:
@@ -309,8 +408,15 @@ class NodeRuntime:
             if advance_to_time >= self.STAT:
                 return  # Wait until STAT increases
 
-            if advance_to_time < self.logical_time:
-                self.logger.warning(f"Logical time decrease: {self.logical_time} -> {advance_to_time}")
+            # Realtime mode: hold the reaction until wall-clock catches up
+            # to its logical timestamp. Use an interruptible wait so that
+            # @trigger callers (or new upstream messages) can push an
+            # earlier-timestamp reaction onto the heap and we re-evaluate.
+            if self.realtime and self._wait_for_realtime(advance_to_time):
+                continue
+
+            # if advance_to_time < self.logical_time:
+            #     self.logger.warning(f"Logical time decrease: {self.logical_time} -> {advance_to_time}")
 
             # Drop bookkeeping for timestamps strictly in the past.
             for t in list(enqueued_funcs_per_time.keys()):
@@ -323,12 +429,24 @@ class NodeRuntime:
             self.logger.set_logical_time(advance_to_time)
             self.logger.set_physical_time(get_physical_time())
 
+            if self.lag_warn is not None:
+                lag = self.start_logical_time + self.logical_time - get_physical_time()
+                if lag > self.lag_warn:
+                    self.logger.warning(
+                        f"Lag {lag} exceeds lag_warn {self.lag_warn} at logical time {self.logical_time}"
+                    )
+
             already_enqueued = enqueued_funcs_per_time.setdefault(advance_to_time, set())
             # Collect trigger functions across all events at advance_to_time
             # before enqueuing reactions, so each function fires at most once
             # per logical timestamp even when its triggering inputs arrive in
-            # multiple message batches.
+            # multiple message batches. Shutdown is deferred so that any
+            # input-triggered reactions at this same timestamp fire first
+            # (they get lower heap counters and therefore run first in
+            # execute_reactions); this matches LF's semantics where shutdown
+            # at tag T sees the effects of all reactions at tag T.
             all_trigger_functions: List[Any] = []
+            saw_shutdown = False
             while self.event_queue.peek_time() is not None and self.event_queue.peek_time() == advance_to_time:
                 event = self.event_queue.pop()
                 assert event is not None, "Event is None"
@@ -340,8 +458,7 @@ class NodeRuntime:
                             if func not in all_trigger_functions:
                                 all_trigger_functions.append(func)
                 elif isinstance(event, ShutdownEvent):
-                    reaction = Reaction(self.shutdown, advance_to_time)
-                    self.reaction_queue.enqueue(reaction, is_shutdown=True)
+                    saw_shutdown = True
                 else:
                     raise ValueError(f"Unexpected event type: {type(event)}")
             for func in all_trigger_functions:
@@ -350,6 +467,9 @@ class NodeRuntime:
                 reaction = Reaction(func, advance_to_time, self.node_instance)
                 self.reaction_queue.enqueue(reaction)
                 already_enqueued.add(func)
+            if saw_shutdown:
+                shutdown_reaction = Reaction(self.shutdown, advance_to_time)
+                self.reaction_queue.enqueue(shutdown_reaction, is_shutdown=True)
 
             self.execute_reactions(advance_to_time)
             self.update_STAT()
@@ -458,8 +578,8 @@ class NodeRuntime:
         new_STAT: Time = forever
         for info in self.upstream_nodes.values():
             new_STAT = min(new_STAT, info.ent + info.min_delay)
-        if new_STAT < self.STAT and self.STAT != forever and self.STAT != never:
-            self.logger.warning(f"STAT decrease: {self.STAT} -> {new_STAT}")
+        # if new_STAT < self.STAT and self.STAT != forever and self.STAT != never:
+        #     self.logger.warning(f"STAT decrease: {self.STAT} -> {new_STAT}")
         new_STAT = min(new_STAT, self.shutdown_time_barrier)
         if self.logger._trace and self.STAT != new_STAT:
             self.logger.debug(f"STAT: {self.STAT} -> {new_STAT}")
@@ -550,6 +670,12 @@ class NodeRuntime:
                 return True
             return True
 
+        # Nodes that expose @trigger methods can produce work asynchronously
+        # from another thread, so an empty-queues snapshot doesn't mean
+        # "done". Stay alive until request_shutdown.
+        if self.trigger_methods:
+            return False
+
         if not self.event_queue and not self.reaction_queue.has_pending() and all_done():
             self._send_no_more_to_downstream()
             return True
@@ -560,6 +686,12 @@ class NodeRuntime:
             self.transport.close()
         if hasattr(self, "coordinator_transport"):
             self.coordinator_transport.close()
+        if self._wake_sender is not None:
+            self._wake_sender.close()
+            self._wake_sender = None
+        if self._wake_receiver is not None:
+            self._wake_receiver.close()
+            self._wake_receiver = None
         closed: set[int] = set()
         for output_port in self.output_port_connectors.values():
             for downstream_port, is_physical, delay in output_port.downstream_ports:

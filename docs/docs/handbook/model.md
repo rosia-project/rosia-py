@@ -69,19 +69,25 @@ Key properties:
   [STAT](STAT) for how that synchronization is enforced.
 - A reaction can use `yield <Time>` to pause and resume after a logical time interval. This turns the reaction into a generator that is re-scheduled at `current_time + delta`.
 
+### Physical actions
+
+A method decorated with [`@trigger`](../tutorial/triggers) is a **physical action**: it can be called from any thread to inject work into the node from outside the dataflow graph (e.g. a sensor callback or a GUI event handler). The call
+captures wall-clock time as the reaction's logical timestamp; the body runs on the node's event-loop thread like any other reaction.
+
 ## Logical Time
 
-Every message carries a **logical timestamp**. Logical time is a discrete, monotonically increasing value that determines the order in which messages are processed. It is independent of wall-clock time — an application may run faster or
-slower than real time.
+Every message carries a **logical timestamp**. Logical time is a discrete, monotonically increasing value that determines the order in which messages are processed. By default, Rosia also gates each reaction on physical (wall-clock) time —
+see [Physical Time](physical_time) — but the order and synchronization story is always governed by logical time.
 
 Each node maintains its own logical clock. The clock advances when:
 
 - A reaction is triggered by an incoming message (the clock moves to the message's timestamp).
 - A reaction yields a time delta (the clock moves forward by that amount).
+- A [`@trigger` physical action](../tutorial/triggers) is invoked from any thread (the clock moves to wall-clock-time-since-start).
 
 Rosia guarantees that within a node, messages are always processed in logical time order. Across nodes, [STAT](STAT) ensures that a node does not advance past a time where it might still receive messages.
 
-For details on time representation and arithmetic, see [Logical Time](logical_time).
+For details on time representation and arithmetic, see [Logical Time](logical_time). For controlling how logical time relates to wall-clock time, see [Physical Time](physical_time).
 
 ## Dataflow Execution
 

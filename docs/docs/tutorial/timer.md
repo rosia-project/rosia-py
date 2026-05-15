@@ -94,8 +94,13 @@ Output:
 
 ## Logical time
 
-Each message in Rosia carries a **[logical timestamp](../handbook/logical_time)**. The `Timer` emits timestamps at its configured interval: `0ns`, `1s`, `2s`, etc. These are logical times, not wall-clock times — the application may run
-faster or slower than real time.
+Each message in Rosia carries a **[logical timestamp](../handbook/logical_time)**. The `Timer` emits timestamps at its configured interval: `0ns`, `1s`, `2s`, etc. These are logical times — labels that order messages — but by default Rosia
+pins them to wall-clock time too: see [realtime mode](../handbook/physical_time). Running the example above takes ~5 s because each tick is gated on physical time. To make it run as fast as the CPU allows (useful for tests), pass
+`realtime=False` to the `Application`:
+
+```python
+app = Application(realtime=False)
+```
 
 Notice the output above: `IntGenerator` receives tick `0.000ns` first, then `Printer` sees `Result: 1`, then tick `1.000s`, then `Result: 2`, and so on. Rosia guarantees that all nodes process messages in logical time order. Even though
 `IntGenerator` and `Printer` run in separate processes, `Printer` will never see `Result: 2` before `Result: 1`.

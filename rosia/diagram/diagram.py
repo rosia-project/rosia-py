@@ -129,9 +129,12 @@ def build_graph(node_infos: "Dict[str, NodeRuntimeInfo]") -> Graph:
         runtime = node_info.node
         node_type = runtime.node_cls.__name__.replace("NodeRuntime", "")
 
-        init_args = None
-        if hasattr(runtime.node_cls, "_rosia_annotations"):
-            init_args = runtime.node_cls._rosia_annotations.get("init_args")
+        # Read init_args from the per-runtime snapshot (captured during
+        # NodeRuntime.__init__). Falling back to runtime.node_cls._rosia_annotations
+        # here would read the *class-level* annotations dict, which is shared by
+        # every instance of the same Node subclass after clone_class_detached,
+        # so it always reflects the most recently constructed instance.
+        init_args = getattr(runtime, "node_init_args", None)
 
         # Build ports
         ports: List[Port] = []

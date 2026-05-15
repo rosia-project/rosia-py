@@ -27,4 +27,5 @@ Requires `python>=3.9`.
 - [Hello World](tutorial/hello) — build your first Rosia application
 - [Timer](tutorial/timer) — drive periodic events with timers and logical time
 - [Synchronization](tutorial/synchronization) — automatic synchronization across parallel pipelines
+- [Physical Actions with `@trigger`](tutorial/triggers) — inject events from external threads (sensors, GUI, callbacks)
 - [Visualization with Rerun](tutorial/rerun) — visualize node data with Rerun

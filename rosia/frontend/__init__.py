@@ -1,4 +1,4 @@
-from .Annotators import reaction, Node
+from .Annotators import reaction, trigger, Node
 from .Port import InputPort, OutputPort
 
-__all__ = ["reaction", "Node", "InputPort", "OutputPort"]
+__all__ = ["reaction", "trigger", "Node", "InputPort", "OutputPort"]
