@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # Physical Actions with `@trigger`
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/physical_trigger.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/physical_trigger.py)
 
 Reactions decorated with `@reaction` only fire in response to messages on input ports. That is not enough when the world outside the dataflow graph needs to inject events — sensor callbacks, GUI inputs, network polls, hardware interrupts.
 The `@trigger` decorator declares a **physical action**: a method on a node that becomes callable from any thread, scheduling its body as a reaction stamped at the wall-clock time of the call.

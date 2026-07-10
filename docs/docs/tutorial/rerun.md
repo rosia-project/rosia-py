@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # Visualization with Rerun
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/bouncing_ball.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/bouncing_ball.py)
 
 Rosia integrates with [Rerun](https://rerun.io/) for visualizing node data over time. Rerun provides an interactive viewer that plots data against both logical and physical time.
 

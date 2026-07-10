@@ -3,7 +3,7 @@
 <p align="left">
 <a href="https://rosia.dev/"><b>Documentation</b></a> |
 <a href="https://rosia.dev/docs/category/tutorial"><b>Tutorial</b></a> |
-<a href="https://github.com/rosia-project/rosia/issues"><b>Issues</b></a> |
+<a href="https://github.com/rosia-project/rosia-py/issues"><b>Issues</b></a> |
 <a href="https://join.slack.com/t/rosia-group/shared_invite/zt-3txqtsyr5-ThEl4XFqwByigP7USkNJmw"><b>Join Slack</b></a> |
 <a href="https://rosia.dev/blog"><b>Blog</b></a>
 </p>
@@ -16,7 +16,7 @@ pip install rosia
 Alternatively, you can install from source:
 
 ```bash
-git clone https://github.com/rosia-project/rosia.git
+git clone https://github.com/rosia-project/rosia-py.git
 cd rosia
 pip install -e .
 ```

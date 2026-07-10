@@ -49,8 +49,8 @@ filterwarnings = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rosia-project/rosia"
-Issues = "https://github.com/rosia-project/rosia/issues"
+Homepage = "https://github.com/rosia-project/rosia-py"
+Issues = "https://github.com/rosia-project/rosia-py/issues"
 
 [tool.setuptools.package-data]
 "rosia.diagram" = ["assets/*.png"]

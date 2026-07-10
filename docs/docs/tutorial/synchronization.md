@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Synchronization
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/synchronization.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/synchronization.py)
 
 This tutorial builds on the [Timer](timer.md) tutorial. Instead of having just one timer and integer generator, now two independent timers drive two integer generators, and a single printer receives both streams and verifies they are
 synchronized.

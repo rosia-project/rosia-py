@@ -100,7 +100,7 @@ const config: Config = {
         },
         { to: "/blog", label: "Blog", position: "left" },
         {
-          href: "https://github.com/rosia-project/rosia",
+          href: "https://github.com/rosia-project/rosia-py",
           label: "GitHub",
           position: "right",
         },
@@ -127,7 +127,7 @@ const config: Config = {
           items: [
             {
               label: "GitHub Issues",
-              href: "https://github.com/rosia-project/rosia/issues",
+              href: "https://github.com/rosia-project/rosia-py/issues",
             },
             {
               label: "Join Slack",
@@ -140,7 +140,7 @@ const config: Config = {
           items: [
             {
               label: "GitHub",
-              href: "https://github.com/rosia-project/rosia",
+              href: "https://github.com/rosia-project/rosia-py",
             },
           ],
         },

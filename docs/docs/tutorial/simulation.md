@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Simulation
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/skiing.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/skiing.py)
 
 This tutorial shows how to drive a simulator with Rosia by building a closed loop between an Atari _Skiing_ environment and a heuristic agent that steers through the gates. It puts together everything from the previous tutorials: ports,
 [reactions](../handbook/model#reactions), [logical time](../handbook/logical_time), and [Rerun visualization](rerun). [STAT](../handbook/STAT) is computed automatically from the topology and the `yield` in the environment's reaction.

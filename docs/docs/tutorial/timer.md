@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Timer
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/timer.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/timer.py)
 
 This tutorial shows how to use a `Timer` node to drive periodic events.
 

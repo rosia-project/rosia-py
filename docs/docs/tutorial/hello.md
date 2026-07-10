@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Hello World
 
-[Full source code](https://github.com/rosia-project/rosia/blob/main/examples/hello.py)
+[Full source code](https://github.com/rosia-project/rosia-py/blob/main/examples/hello.py)
 
 This tutorial builds a simple Rosia application: one node sends a message, another prints it.
 
