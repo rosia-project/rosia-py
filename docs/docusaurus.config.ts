@@ -77,7 +77,7 @@ const config: Config = {
   themeConfig: {
     announcementBar: {
       id: "alpha_testing",
-      content: "Rosia is currently in alpha testing. API is susceptible to change.",
+      content: "Rosia is currently being rewritten in Rust. API is susceptible to change.",
       isCloseable: true,
     },
     // Replace with your project's social card
